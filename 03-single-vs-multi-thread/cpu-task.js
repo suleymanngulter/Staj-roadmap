@@ -1,8 +1,3 @@
-// YARDIMCI MODÜL — doğrudan çalıştırılmaz.
-// single-thread.js ve multi-thread.js bu dosyayı require("./cpu-task") ile kullanır.
-//
-// CPU-bound (işlemciyi yoran) görev: bir aralıktaki asal sayıları sayar.
-// Bilerek yavaş bir algoritma; event loop'un bloklanmasını net göstermek için.
 
 function isPrime(n) {
   if (n < 2) return false;
