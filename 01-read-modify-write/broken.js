@@ -1,10 +1,5 @@
-// SENARYO 1 — Read-Modify-Write (BOZUK)
-//
-// Problem: Paylaşılan "balance" değişkenine birden fazla async işlem aynı anda
-// "oku -> değiştir -> yaz" yapıyor. İki işlem de eski değeri okuyup üstüne
-// yazınca güncellemelerden biri kaybolur (lost update).
-//
-// Çalıştır: node 01-read-modify-write/broken.js
+
+// node 01-read-modify-write/broken.js
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

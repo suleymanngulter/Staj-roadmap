@@ -19,9 +19,9 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 
 | Konu | Nerede |
 |------|--------|
-| Single-thread (event loop bloklanması) vs multi-thread (Worker ile paralel) | `08-single-vs-multi-thread` |
-| Gerçek shared memory race (çoklu thread + `SharedArrayBuffer`) | `07-shared-memory` |
-| Async concurrency race (tek thread, `await` interleaving) | `01`–`06` |
+| Async concurrency race (tek thread, `await` interleaving) | `01-read-modify-write` |
+| Gerçek shared memory race (çoklu thread + `SharedArrayBuffer`) | `02-shared-memory` |
+| Single-thread (event loop bloklanması) vs multi-thread (Worker ile paralel) | `03-single-vs-multi-thread` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | libuv thread pool, semafor, atomic operations | `docs/` PDF + aşağıdaki notlar |
 
@@ -42,9 +42,12 @@ Kurulum gerektirmez (sadece Node.js gerekir; v18+ önerilir).
 node 01-read-modify-write/broken.js
 node 01-read-modify-write/fixed.js
 
-# Single vs multi-thread demosu:
-node 08-single-vs-multi-thread/single-thread.js
-node 08-single-vs-multi-thread/multi-thread.js
+# Single vs multi-thread demosu (önerilen giriş):
+node 03-single-vs-multi-thread/compare.js
+
+# Tek tek:
+node 03-single-vs-multi-thread/single-thread.js
+node 03-single-vs-multi-thread/multi-thread.js
 
 # Hepsini bir arada (broken + fixed):
 node run-all.js
@@ -59,15 +62,12 @@ node run-all.js
 | # | Klasör | Problem | Çözüm |
 |---|--------|---------|-------|
 | 1 | `01-read-modify-write` | Paylaşılan değişkene eşzamanlı oku-değiştir-yaz; güncelleme kaybı (lost update) | Mutex / kilit ile kritik bölümü serileştirmek |
-| 2 | `02-stale-response` | Eski isteğin cevabı yeni cevabın üstüne yazıyor (autocomplete) | İstek ID'si ile en sonu kabul etmek; `AbortController`; debounce |
-| 3 | `03-concurrent-init` | Eşzamanlı çağrılar pahalı başlatmayı birden çok kez yapıyor | Promise'i cache'lemek (in-flight deduplication) |
-| 4 | `04-check-then-act` | "Kontrol et sonra uygula" arasında durum değişiyor; duplicate kayıt (TOCTOU) | Atomik işlem: DB unique constraint + upsert; ya da kilit |
-| 5 | `05-promise-ordering` | Bağımlı işler paralel başlatılınca sıra bozuluyor | Bağımlı işler sıralı (`await`), bağımsız işler `Promise.all` |
-| 6 | `06-async-queue` | Sırası önemli olaylar paralel işlenince sıra bozuluyor | Promise zinciriyle async kuyruk |
-| 7 | `07-shared-memory` | Birden fazla Worker thread'i aynı `SharedArrayBuffer`'a atomik olmadan oku-değiştir-yaz yapıyor; **gerçek data race** (lost update) | `Atomics.add` ile atomik işlem |
-| 8 | `08-single-vs-multi-thread` | Tek thread'de ağır CPU işi event loop'u **bloklar**; tek çekirdek kullanılır | İşi `worker_threads` ile çok çekirdeğe **paralel** dağıtmak |
+| 2 | `02-shared-memory` | Birden fazla Worker thread'i aynı `SharedArrayBuffer`'a atomik olmadan oku-değiştir-yaz yapıyor; **gerçek data race** (lost update) | `Atomics.add` ile atomik işlem |
+| 3 | `03-single-vs-multi-thread` | Tek thread'de ağır CPU işi event loop'u **bloklar**; tek çekirdek kullanılır | İşi `worker_threads` ile çok çekirdeğe **paralel** dağıtmak |
 
-## Single-thread mi, multi-thread mi? (Senaryo 8)
+Dosyalar: `compare.js` (ana giriş, ikisini sırayla çalıştırır), `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
+
+## Single-thread mi, multi-thread mi? (Senaryo 3)
 
 Node.js'in JS execution modeli **varsayılan olarak single-thread**'dir: tüm
 JS kodun **tek bir event loop** üzerinde çalışır. Ama bu "Node hiç thread
@@ -87,7 +87,7 @@ kullanmaz" demek değildir. Üç katman vardır:
 └─────────────────────────────────────────────────┘
 ```
 
-`08-single-vs-multi-thread` demosu bunu kanıtlar: aynı CPU-bound iş (asal sayma)
+`03-single-vs-multi-thread` demosu bunu kanıtlar: aynı CPU-bound iş (asal sayma)
 
 - **single-thread**: event loop bloklanır, "heartbeat" hiç çalışamaz, tek çekirdek.
 - **multi-thread**: iş 4 Worker'a bölünür, event loop boş kalır (heartbeat çalışır),
@@ -123,29 +123,17 @@ Kısaca (PDF'teki ayrımla uyumlu):
 
 ## İki farklı race türü (önemli ayrım)
 
-- **Senaryo 1–6: Async concurrency race (mantıksal yarış).** JavaScript tek
+- **Senaryo 1: Async concurrency race (mantıksal yarış).** JavaScript tek
   thread'lidir. Gerçek paralellik yoktur; yarış sadece `await` noktalarında
   işlemlerin **iç içe geçmesinden (interleaving)** doğar. Bellek paylaşımı
-  yoktur. Bu yüzden "bazen şanslı çıkarız". Çözüm: Mutex, request ID, doğru
-  `await`/`Promise.all` kullanımı.
-- **Senaryo 7: Shared Memory / data race (gerçek yarış).** Birden fazla Worker
+  yoktur. Bu yüzden "bazen şanslı çıkarız". Çözüm: Mutex ile kritik bölümü
+  serileştirmek.
+- **Senaryo 2: Shared Memory / data race (gerçek yarış).** Birden fazla Worker
   thread'i (ayrı OS thread'leri, ayrı çekirdekler) **aynı `SharedArrayBuffer`'a**
   erişir. `view[0] += 1` CPU seviyesinde LOAD→ADD→STORE üç adımdır ve atomik
   değildir; thread'ler araya girip artışları kaybeder. Bu, C/C++'taki
   `pthread` data race'inin JavaScript karşılığıdır. Çözüm: `Atomics.*`
   (örn. `Atomics.add`) ya da Atomics tabanlı kilit.
-
-## Çözüm tekniklerinin özeti
-
-- **Mutex / Lock:** Kritik bölümü tek seferde bir işleme açmak (#1, #4).
-- **İstek ID / sıra numarası:** Sadece en güncel cevabı kullanmak (#2).
-- **AbortController:** Eski/gereksiz isteği iptal etmek (#2).
-- **Debounce / throttle:** İstek sıklığını azaltmak (#2).
-- **Promise caching:** Aynı anda gelen istekleri tek işleme indirmek (#3).
-- **Atomik işlemler + unique constraint:** Eşzamanlılığı veri katmanında garanti etmek (#4).
-- **Idempotency:** Bir işlemi tekrar etmek zararsız olacak şekilde tasarlamak (#4).
-- **Doğru `await` / `Promise.all` kullanımı:** Bağımlılığa göre sıralı ya da paralel (#5).
-- **Async queue:** Olayları sırayla işlemek (#6).
 
 ## Bonus: Mutex örneği
 

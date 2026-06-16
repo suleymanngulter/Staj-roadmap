@@ -1,15 +1,5 @@
-// SENARYO 7 — Shared Memory Race (DÜZELTİLMİŞ)
-//
-// Çözüm: "oku -> değiştir -> yaz" adımını tek bir BÖLÜNEMEZ (atomik) işleme
-// indirgemek. `Atomics.add(view, 0, 1)` donanım/runtime tarafından kesintisiz
-// çalışır: hiçbir thread araya giremez, hiçbir artış kaybolmaz.
-//
-// Not: Async senaryolardaki çözüm "Mutex ile serileştirme" idi. Burada da fikir
-// aynıdır (kritik bölümü korumak) ama paylaşımlı bellekte doğru araç Atomics'tir.
-// Alternatif olarak Atomics tabanlı bir kilit de yazılabilirdi; Atomics.add en
-// yalın ve en hızlı çözümdür.
-//
-// Çalıştır: node 07-shared-memory/fixed.js
+
+// node 02-shared-memory/broken.js
 
 const {
   Worker,
@@ -17,17 +7,20 @@ const {
   workerData,
 } = require("worker_threads");
 
-const WORKER_COUNT = 4;
-const INCREMENTS = 200000;
+const WORKER_COUNT = 4; // 4 ayrı thread (gerçek paralellik)
+const INCREMENTS = 200000; // her thread bu kadar +1 yapar
 
 if (isMainThread) {
-  // --- ANA THREAD ---
+  // ANA THREAD 
+  // Paylaşılan bellek: tüm thread'ler aynı 4 byte'a bakar. Tek iş 4 çalışan
   const sharedBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
   const view = new Int32Array(sharedBuffer);
-  view[0] = 0;
+  view[0] = 0; // balance = 0
 
   const workers = [];
   for (let i = 0; i < WORKER_COUNT; i++) {
+    // Aynı dosyayı worker olarak yeniden çalıştırıyoruz; SharedArrayBuffer'ı
+    // workerData ile geçiyoruz (kopyalanmaz, AYNI bellek paylaşılır).
     workers.push(
       new Promise((resolve, reject) => {
         const w = new Worker(__filename, {
@@ -48,14 +41,15 @@ if (isMainThread) {
     console.log(
       "Gerçek bakiye:   ",
       actual,
-      actual === expected ? "(doğru)" : "<-- hala yanlış"
+      actual === expected ? "(şanslıydık)" : "<-- LOST UPDATE! (data race)"
     );
+    console.log("Kaybolan artış:  ", expected - actual);
   });
 } else {
   // --- WORKER THREAD ---
   const view = new Int32Array(workerData.sharedBuffer);
   for (let i = 0; i < workerData.increments; i++) {
-    // ATOMİK: oku-+1-yaz bölünemez tek işlem. Yarış yok, kayıp yok.
-    Atomics.add(view, 0, 1);
+    // ATOMİK DEĞİL: oku-değiştir-yaz arasında başka thread araya girebilir.
+    view[0] = view[0] + 1;
   }
 }

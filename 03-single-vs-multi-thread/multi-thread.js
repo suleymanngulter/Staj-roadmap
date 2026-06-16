@@ -1,11 +1,5 @@
-// MULTI THREAD — worker_threads ile bilinçli paralellik
-//
-// Aynı CPU-bound işi 4 Worker'a (4 ayrı OS thread'i, ayrı CPU çekirdekleri)
-// bölüyoruz. Her Worker kendi V8 isolate'ı ve event loop'u ile ÇALIŞIR.
-// Sonuç: iş paralel biter (çok çekirdekli makinede daha hızlı) VE ana thread'in
-// event loop'u BLOKLANMAZ; heartbeat boyunca rahatça çalışmaya devam eder.
-//
-// Çalıştır: node 08-single-vs-multi-thread/multi-thread.js
+
+// node 03-single-vs-multi-thread/multi-thread.js
 
 const {
   Worker,
@@ -20,7 +14,15 @@ const CHUNKS = 4;
 const chunkSize = RANGE / CHUNKS;
 
 if (isMainThread) {
-  // --- ANA THREAD ---
+  main();
+} else {
+  // --- WORKER THREAD (ayrı giriş noktası; main() burada çağrılmaz) ---
+  const { start, end } = workerData;
+  const count = countPrimes(start, end);
+  parentPort.postMessage(count);
+}
+
+function main() {
   let beats = 0;
   const heartbeat = setInterval(() => {
     beats++;
@@ -36,9 +38,8 @@ if (isMainThread) {
     const end = start + chunkSize;
     tasks.push(
       new Promise((resolve, reject) => {
-        // Aynı dosyayı worker olarak çalıştırıyoruz; aralığı workerData ile veriyoruz.
         const w = new Worker(__filename, { workerData: { start, end } });
-        w.on("message", resolve); // worker hesapladığı adedi mesajla döner
+        w.on("message", resolve);
         w.on("error", reject);
         w.on("exit", (code) => {
           if (code !== 0) reject(new Error("worker exit " + code));
@@ -59,9 +60,4 @@ if (isMainThread) {
       "Not: heartbeat çalışmaya devam etti çünkü ağır iş Worker'larda, ana event loop boştu."
     );
   });
-} else {
-  // --- WORKER THREAD ---
-  const { start, end } = workerData;
-  const count = countPrimes(start, end);
-  parentPort.postMessage(count);
 }

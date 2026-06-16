@@ -1,17 +1,25 @@
-// Tüm senaryoların önce "broken" sonra "fixed" sürümünü sırayla çalıştırır.
+// Tüm örnekleri sırayla çalıştırır.
 // Çalıştır: node run-all.js
 
 const { execFileSync } = require("child_process");
 const path = require("path");
 
-const scenarios = [
-  ["01-read-modify-write", "Read-Modify-Write (lost update)"],
-  ["02-stale-response", "Stale Response / autocomplete"],
-  ["03-concurrent-init", "Çift Başlatma / cache stampede"],
-  ["04-check-then-act", "Check-Then-Act / TOCTOU"],
-  ["05-promise-ordering", "Yanlış Sıralama"],
-  ["06-async-queue", "Sıralı işleme / async queue"],
-  ["07-shared-memory", "Shared Memory / data race (gerçek paralellik)"],
+// Her bölüm: başlık + çalıştırılacak dosyalar (etiket -> dosya yolu).
+const sections = [
+  {
+    title: "Read-Modify-Write (async lost update)",
+    files: [
+      ["BOZUK (broken.js)", "01-read-modify-write/broken.js"],
+      ["DÜZELTİLMİŞ (fixed.js)", "01-read-modify-write/fixed.js"],
+    ],
+  },
+  {
+    title: "Shared Memory / data race (gerçek paralellik)",
+    files: [
+      ["BOZUK (broken.js)", "02-shared-memory/broken.js"],
+      ["DÜZELTİLMİŞ (fixed.js)", "02-shared-memory/fixed.js"],
+    ],
+  },
 ];
 
 function run(file) {
@@ -24,15 +32,15 @@ function run(file) {
   }
 }
 
-for (const [dir, title] of scenarios) {
+for (const { title, files } of sections) {
   console.log("\n========================================================");
   console.log("SENARYO:", title);
   console.log("========================================================");
-  console.log("\n--- BOZUK (broken.js) ---");
-  run(path.join(dir, "broken.js"));
-  console.log("\n--- DÜZELTİLMİŞ (fixed.js) ---");
-  run(path.join(dir, "fixed.js"));
+  for (const [label, file] of files) {
+    console.log(`\n--- ${label} ---`);
+    run(file);
+  }
 }
 
-console.log("\nNot: 'broken' senaryolar zamanlamaya bağlıdır; bazen tek çalıştırmada");
+console.log("\nNot: 'broken' örnekler zamanlamaya bağlıdır; bazen tek çalıştırmada");
 console.log("yanlış sonuç görünmeyebilir. Birkaç kez çalıştırın.");
