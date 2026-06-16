@@ -1,0 +1,13 @@
+{
+  "name": "race-conditions",
+  "version": "1.0.0",
+  "description": "Node.js eşzamanlılık, race condition ve thread örnekleri",
+  "private": true,
+  "scripts": {
+    "all": "node run-all.js",
+    "pdf": "node 05-pdfkit-report/generate.js"
+  },
+  "dependencies": {
+    "pdfkit": "^0.15.0"
+  }
+}

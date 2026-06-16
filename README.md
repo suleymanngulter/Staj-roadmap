@@ -22,8 +22,10 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | Async concurrency race (tek thread, `await` interleaving) | `01-read-modify-write` |
 | Gerçek shared memory race (çoklu thread + `SharedArrayBuffer`) | `02-shared-memory` |
 | Single-thread (event loop bloklanması) vs multi-thread (Worker ile paralel) | `03-single-vs-multi-thread` |
+| libuv thread pool'u büyütmek (`UV_THREADPOOL_SIZE`) ve etkisini ölçmek | `04-libuv-threadpool` |
+| pdfkit ile mock veriden PDF üretmek (stream tabanlı I/O) | `05-pdfkit-report` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
-| libuv thread pool, semafor, atomic operations | `docs/` PDF + aşağıdaki notlar |
+| Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
 ## Race condition nedir? (kısa)
 
@@ -35,7 +37,8 @@ değişmesine race condition denir.
 
 ## Çalıştırma
 
-Kurulum gerektirmez (sadece Node.js gerekir; v18+ önerilir).
+Senaryo 1–4 kurulum gerektirmez (sadece Node.js; v18+ önerilir). Senaryo 5
+(pdfkit) için bir kez bağımlılık kurun: `npm install`.
 
 ```bash
 # Tek bir senaryo:
@@ -46,7 +49,13 @@ node 01-read-modify-write/fixed.js
 node 03-single-vs-multi-thread/single-thread.js
 node 03-single-vs-multi-thread/multi-thread.js
 
-# Hepsini bir arada (broken + fixed):
+# libuv thread pool ölçümü (UV_THREADPOOL_SIZE etkisi):
+node 04-libuv-threadpool/measure.js
+
+# pdfkit ile mock veriden PDF üret (önce: npm install):
+node 05-pdfkit-report/generate.js
+
+# Hepsini bir arada:
 node run-all.js
 ```
 
@@ -61,8 +70,10 @@ node run-all.js
 | 1 | `01-read-modify-write` | Paylaşılan değişkene eşzamanlı oku-değiştir-yaz; güncelleme kaybı (lost update) | Mutex / kilit ile kritik bölümü serileştirmek |
 | 2 | `02-shared-memory` | Birden fazla Worker thread'i aynı `SharedArrayBuffer`'a atomik olmadan oku-değiştir-yaz yapıyor; **gerçek data race** (lost update) | `Atomics.add` ile atomik işlem |
 | 3 | `03-single-vs-multi-thread` | Tek thread'de ağır CPU işi event loop'u **bloklar**; tek çekirdek kullanılır | İşi `worker_threads` ile çok çekirdeğe **paralel** dağıtmak |
+| 4 | `04-libuv-threadpool` | libuv thread pool varsayılan 4 thread; ağır I/O (crypto/fs) işleri pool dolunca sıra bekler | `UV_THREADPOOL_SIZE` ile pool'u büyütmek (çekirdek sınırına kadar) |
+| 5 | `05-pdfkit-report` | (race değil) pdfkit ile mock veriden fatura PDF'i üretmek; stream tabanlı dosya yazımı | — |
 
-Dosyalar: `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
+Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
 ## Single-thread mi, multi-thread mi? (Senaryo 3)
 
@@ -92,6 +103,61 @@ kullanmaz" demek değildir. Üç katman vardır:
 
 Yani Node **kendiliğinden** multi-thread olmaz; `worker_threads` ile **bilinçli
 olarak** açarsın.
+
+## libuv thread pool'u büyütmek (Senaryo 4)
+
+Yukarıdaki 2. katman (libuv thread pool) **varsayılan 4 thread** ile gelir ve
+şu C++ tarafı işler için kullanılır: **dosya sistemi (`fs`)**, **kriptografi
+(`crypto`)**, **DNS (`dns.lookup`)**, **zlib**. (Ağ I/O — TCP/HTTP — bu pool'u
+kullanmaz; OS'in epoll/kqueue/IOCP mekanizmasıyla yürür.)
+
+Pool boyutu **`UV_THREADPOOL_SIZE`** ortam değişkeni ile değiştirilir (1–1024):
+
+```bash
+UV_THREADPOOL_SIZE=8 node app.js
+```
+
+Önemli: pool, ilk kullanımda **bir kez** oluşur; bu yüzden değer process
+**başlamadan önce** verilmelidir. Kod içinden `process.env.UV_THREADPOOL_SIZE = ...`
+genelde geç kalır.
+
+`04-libuv-threadpool/measure.js` aynı 8 ağır `pbkdf2` işini farklı pool
+boyutlarıyla (ayrı process'ler olarak) çalıştırıp süreyi ölçer. Örnek çıktı
+(16 çekirdekli makine):
+
+```
+UV_THREADPOOL_SIZE=1   | 8 görev | süre: 1050 ms
+UV_THREADPOOL_SIZE=2   | 8 görev | süre:  554 ms
+UV_THREADPOOL_SIZE=4   | 8 görev | süre:  290 ms
+UV_THREADPOOL_SIZE=8   | 8 görev | süre:  216 ms
+```
+
+Pool büyüdükçe işler daha çok paralelleşir ve süre kısalır. **Ama** sınır CPU
+çekirdek sayısıdır: çekirdekten fazla thread, thread'ler çekirdek için sıraya
+gireceğinden ek fayda getirmez (hatta context-switch yüzünden kötüleşebilir).
+İyi bir başlangıç: `UV_THREADPOOL_SIZE ≈ os.cpus().length`.
+
+`worker_threads` ile farkı: bu pool **senin JS kodunu** paralelleştirmez; yalnızca
+arka plandaki C++ I/O işlerinin kaç tanesinin aynı anda yürüyeceğini belirler.
+
+## pdfkit ile PDF üretimi (Senaryo 5)
+
+`05-pdfkit-report/generate.js`, mock (sahte) fatura verisinden A4 bir PDF üretir:
+başlık, firma/müşteri bilgisi, kalem tablosu ve KDV'li toplamlar. pdfkit içeriği
+parça parça bir **stream**'e yazar; biz de `fs.createWriteStream` ile dosyaya
+akıtır, `stream.on("finish")` ile bitişi bekleriz (asenkron I/O).
+
+```bash
+npm install            # bir kez
+node 05-pdfkit-report/generate.js
+# özel çıktı yolu:
+node 05-pdfkit-report/generate.js /tmp/fatura.pdf
+```
+
+Türkçe karakter notu: pdfkit'in gömülü Helvetica fontu `ş, ğ, ı, İ` gibi
+karakterleri içermez. Demo, sistemde Türkçe destekleyen bir TTF (Liberation
+Sans, DejaVu Sans, Open Sans...) arar ve bulduğunu gömer; bulamazsa uyarı verip
+varsayılan fonta düşer. Üretilen `.pdf`/`.png` çıktıları `.gitignore`'dadır.
 
 ## Worker vs child_process vs cluster vs Promise
 

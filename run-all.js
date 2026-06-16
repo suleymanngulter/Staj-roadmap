@@ -20,6 +20,10 @@ const sections = [
       ["DÜZELTİLMİŞ (fixed.js)", "02-shared-memory/fixed.js"],
     ],
   },
+  {
+    title: "libuv thread pool (UV_THREADPOOL_SIZE etkisi)",
+    files: [["ÖLÇÜM (measure.js)", "04-libuv-threadpool/measure.js"]],
+  },
 ];
 
 function run(file) {

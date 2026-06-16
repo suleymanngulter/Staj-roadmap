@@ -7,3 +7,7 @@ yarn-error.log*
 .DS_Store
 .idea/
 .vscode/
+
+# pdfkit demosunun ürettiği çıktılar (kod çalışınca yeniden oluşur)
+05-pdfkit-report/*.pdf
+05-pdfkit-report/*.png
