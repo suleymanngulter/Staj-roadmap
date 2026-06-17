@@ -4,19 +4,74 @@ const { Worker } = require("worker_threads");
 const { createCounterPdf } = require("./lib/create-counter-pdf");
 const { mergePdfs } = require("./lib/merge-pdfs");
 
-const COUNT = Number(process.env.COUNT) || 200;
+const COUNT = Number(process.env.COUNT) || 2000;
 const WORKERS = Number(process.env.WORKERS) || 8;
+const RUNS = Number(process.env.RUNS) || 20;
 const DIR = __dirname;
+const OUT_DIR = path.join(DIR, "output");
+const WORKER_SCRIPT = path.join(DIR, "worker.js");
 
-function printTimes(label, { genMs, mergeMs }) {
-  const totalMs = genMs + mergeMs;
-  console.log(label);
-  console.log(`  Üretim : ${genMs} ms`);
-  console.log(`  Merge  : ${mergeMs} ms`);
-  console.log(`  Toplam : ${totalMs} ms\n`);
+function ensureOutDir() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
 }
 
-async function runSingleThread() {
+function avg(runs, key) {
+  const values = runs.map((r) => r[key]).filter((v) => v != null);
+  if (values.length === 0) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function totalMs({ genMs, mergeMs }) {
+  return genMs + (mergeMs ?? 0);
+}
+
+function createWorkerPool(size) {
+  const workers = Array.from({ length: size }, () => new Worker(WORKER_SCRIPT));
+
+  function dispatch(worker, from, to) {
+    return new Promise((resolve, reject) => {
+      const onMessage = (msg) => {
+        cleanup();
+        if (msg.error) reject(new Error(msg.error));
+        else resolve(msg.buffers);
+      };
+      const onError = (err) => {
+        cleanup();
+        reject(err);
+      };
+      const cleanup = () => {
+        worker.off("message", onMessage);
+        worker.off("error", onError);
+      };
+
+      worker.on("message", onMessage);
+      worker.on("error", onError);
+      worker.postMessage({ from, to });
+    });
+  }
+
+  return {
+    workers,
+    dispatch,
+    terminate() {
+      return Promise.all(workers.map((w) => w.terminate()));
+    },
+  };
+}
+
+function chunkRanges(count, workerCount) {
+  const chunkSize = Math.ceil(count / workerCount);
+  const ranges = [];
+  for (let i = 0; i < workerCount; i++) {
+    const from = i * chunkSize + 1;
+    const to = Math.min((i + 1) * chunkSize, count);
+    if (from > count) break;
+    ranges.push({ from, to });
+  }
+  return ranges;
+}
+
+async function runSingleThread(writePdf) {
   const genStart = Date.now();
   const buffers = [];
 
@@ -25,62 +80,161 @@ async function runSingleThread() {
   }
   const genMs = Date.now() - genStart;
 
-  const mergeStart = Date.now();
-  const merged = await mergePdfs(buffers);
-  const mergeMs = Date.now() - mergeStart;
+  let mergeMs = null;
+  if (writePdf) {
+    const mergeStart = Date.now();
+    const merged = await mergePdfs(buffers);
+    mergeMs = Date.now() - mergeStart;
+    fs.writeFileSync(path.join(OUT_DIR, "merged-single-thread.pdf"), merged);
+  }
 
-  fs.writeFileSync(path.join(DIR, "merged-single-thread.pdf"), merged);
+  return { genMs, mergeMs, buffers: writePdf ? null : undefined };
+}
+
+async function runMultiThread(pool, writePdf) {
+  const ranges = chunkRanges(COUNT, pool.workers.length);
+  const genStart = Date.now();
+
+  const chunks = await Promise.all(
+    ranges.map((range, i) => pool.dispatch(pool.workers[i], range.from, range.to))
+  );
+  const genMs = Date.now() - genStart;
+  const buffers = chunks.flat();
+
+  let mergeMs = null;
+  if (writePdf) {
+    const mergeStart = Date.now();
+    const merged = await mergePdfs(buffers);
+    mergeMs = Date.now() - mergeStart;
+    fs.writeFileSync(path.join(OUT_DIR, "merged-multi-thread.pdf"), merged);
+  }
+
   return { genMs, mergeMs };
 }
 
-function runMultiThread() {
-  const chunkSize = Math.ceil(COUNT / WORKERS);
-  const genStart = Date.now();
+function formatRunLine(i, single, multi) {
+  const fmtMerge = (ms) => (ms == null ? "—" : `${ms} ms`);
+  return (
+    `Koşu ${String(i).padStart(2)} | ` +
+    `single: üretim ${single.genMs} ms, merge ${fmtMerge(single.mergeMs)}, toplam ${totalMs(single)} ms | ` +
+    `multi:  üretim ${multi.genMs} ms, merge ${fmtMerge(multi.mergeMs)}, toplam ${totalMs(multi)} ms`
+  );
+}
 
-  const tasks = [];
-  for (let i = 0; i < WORKERS; i++) {
-    const from = i * chunkSize + 1;
-    const to = Math.min((i + 1) * chunkSize, COUNT);
-    if (from > COUNT) break;
+function buildSummary(singleRuns, multiRuns) {
+  const singleAvg = {
+    genMs: avg(singleRuns, "genMs"),
+    mergeMs: avg(singleRuns, "mergeMs"),
+  };
+  const multiAvg = {
+    genMs: avg(multiRuns, "genMs"),
+    mergeMs: avg(multiRuns, "mergeMs"),
+  };
 
-    tasks.push(
-      new Promise((resolve, reject) => {
-        const worker = new Worker(path.join(DIR, "worker.js"), {
-          workerData: { from, to },
-        });
-        worker.on("message", resolve);
-        worker.on("error", reject);
-        worker.on("exit", (code) => {
-          if (code !== 0) reject(new Error(`worker exit ${code}`));
-        });
-      })
-    );
+  const lastSingleMerge = singleRuns[singleRuns.length - 1].mergeMs ?? 0;
+  const lastMultiMerge = multiRuns[multiRuns.length - 1].mergeMs ?? 0;
+  const genSpeedup = singleAvg.genMs / multiAvg.genMs;
+  const totalWithLastMerge =
+    (singleAvg.genMs + lastSingleMerge) / (multiAvg.genMs + lastMultiMerge);
+
+  const lines = [
+    `PDF Benchmark Sonuçları (ağır içerik)`,
+    `Tarih   : ${new Date().toISOString()}`,
+    `COUNT   : ${COUNT}`,
+    `WORKERS : ${WORKERS} (worker pool — koşular arası yeniden kullanım)`,
+    `RUNS    : ${RUNS}`,
+    `PDF     : 3 sayfa (başlık + lorem + tablo + grafik), belge başına farklı içerik`,
+    `Not     : Merge yalnızca son koşuda ölçülür (${COUNT} belge birleştirme çok ağır)`,
+    ``,
+    `--- Koşu bazlı süreler ---`,
+  ];
+
+  for (let i = 0; i < RUNS; i++) {
+    lines.push(formatRunLine(i + 1, singleRuns[i], multiRuns[i]));
   }
 
-  return Promise.all(tasks).then(async (chunks) => {
-    const genMs = Date.now() - genStart;
-    const buffers = chunks.flat();
+  lines.push(
+    ``,
+    `--- Aritmetik ortalama (${RUNS} koşu, üretim) ---`,
+    `SINGLE-THREAD`,
+    `  Üretim (ort.) : ${singleAvg.genMs.toFixed(1)} ms`,
+    `  Merge (son)   : ${lastSingleMerge} ms`,
+  );
 
-    const mergeStart = Date.now();
-    const merged = await mergePdfs(buffers);
-    const mergeMs = Date.now() - mergeStart;
+  if (RUNS > 1) {
+    lines.push(`  Üretim (son)  : ${singleRuns[singleRuns.length - 1].genMs} ms`);
+  }
 
-    fs.writeFileSync(path.join(DIR, "merged-multi-thread.pdf"), merged);
-    return { genMs, mergeMs };
-  });
+  lines.push(
+    ``,
+    `MULTI-THREAD (${WORKERS} worker, pool)`,
+    `  Üretim (ort.) : ${multiAvg.genMs.toFixed(1)} ms`,
+    `  Merge (son)   : ${lastMultiMerge} ms`
+  );
+
+  if (RUNS > 1) {
+    lines.push(`  Üretim (son)  : ${multiRuns[multiRuns.length - 1].genMs} ms`);
+  }
+
+  lines.push(
+    ``,
+    `--- Hızlanma ---`,
+    `Üretim (ortalama)     : ${genSpeedup.toFixed(2)}x`,
+    `Toplam (ort. üretim + son merge) : ${totalWithLastMerge.toFixed(2)}x`,
+    ``,
+    `PDF çıktıları: ${OUT_DIR}/`,
+    `  merged-single-thread.pdf`,
+    `  merged-multi-thread.pdf`
+  );
+
+  return { lines, genSpeedup, singleAvg, multiAvg };
 }
 
 async function main() {
-  console.log(`COUNT=${COUNT}, WORKERS=${WORKERS}\n`);
+  ensureOutDir();
+  const pool = createWorkerPool(WORKERS);
 
-  const single = await runSingleThread();
-  printTimes("SINGLE-THREAD", single);
+  console.log(
+    `COUNT=${COUNT}, WORKERS=${WORKERS} (pool), RUNS=${RUNS}\n` +
+      `PDF: 3 sayfa, lorem + tablo + grafik\n`
+  );
 
-  const multi = await runMultiThread();
-  printTimes(`MULTI-THREAD (${WORKERS} worker)`, multi);
+  const singleRuns = [];
+  const multiRuns = [];
 
-  const speedup = (single.genMs + single.mergeMs) / (multi.genMs + multi.mergeMs);
-  console.log(`Hızlanma (toplam): ${speedup.toFixed(2)}x`);
+  try {
+    for (let i = 1; i <= RUNS; i++) {
+      const writePdf = i === RUNS;
+      const singleFirst = i % 2 === 1;
+
+      let single;
+      let multi;
+
+      if (singleFirst) {
+        single = await runSingleThread(writePdf);
+        multi = await runMultiThread(pool, writePdf);
+      } else {
+        multi = await runMultiThread(pool, writePdf);
+        single = await runSingleThread(writePdf);
+      }
+
+      singleRuns.push(single);
+      multiRuns.push(multi);
+      console.log(formatRunLine(i, single, multi));
+    }
+  } finally {
+    await pool.terminate();
+  }
+
+  const { lines, genSpeedup } = buildSummary(singleRuns, multiRuns);
+
+  const summaryStart = lines.findIndex((l) => l.startsWith("--- Aritmetik ortalama"));
+  console.log(`\n${lines.slice(summaryStart).join("\n")}`);
+
+  const resultsPath = path.join(OUT_DIR, "results.txt");
+  fs.writeFileSync(resultsPath, lines.join("\n") + "\n");
+  console.log(`\nSonuçlar yazıldı: ${resultsPath}`);
+  console.log(`Üretim hızlanması (multi kazanımı): ${genSpeedup.toFixed(2)}x`);
 }
 
 main().catch((err) => {

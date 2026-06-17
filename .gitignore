@@ -11,3 +11,4 @@ yarn-error.log*
 # pdfkit demosunun ürettiği çıktılar (kod çalışınca yeniden oluşur)
 05-pdfkit-report/*.pdf
 05-pdfkit-report/*.png
+05-pdfkit-report/output/

@@ -1,17 +1,14 @@
-const { parentPort, workerData } = require("worker_threads");
+const { parentPort } = require("worker_threads");
 const { createCounterPdf } = require("./lib/create-counter-pdf");
 
-async function run() {
-  const { from, to } = workerData;
-  const buffers = [];
-
-  for (let n = from; n <= to; n++) {
-    buffers.push(await createCounterPdf(n));
+parentPort.on("message", async ({ from, to }) => {
+  try {
+    const buffers = [];
+    for (let n = from; n <= to; n++) {
+      buffers.push(await createCounterPdf(n));
+    }
+    parentPort.postMessage({ buffers });
+  } catch (err) {
+    parentPort.postMessage({ error: err.message });
   }
-
-  parentPort.postMessage(buffers);
-}
-
-run().catch((err) => {
-  throw err;
 });
