@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "all": "node run-all.js",
-    "pdf": "node 05-pdfkit-report/generate.js"
+    "pdf": "node 05-pdfkit-report/nodejs/benchmark.js"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",

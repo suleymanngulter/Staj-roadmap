@@ -24,6 +24,7 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | Single-thread (event loop bloklanması) vs multi-thread (Worker ile paralel) | `03-single-vs-multi-thread` |
 | libuv thread pool'u büyütmek (`UV_THREADPOOL_SIZE`) ve etkisini ölçmek | `04-libuv-threadpool` |
 | pdfkit ile mock veriden PDF üretmek (stream tabanlı I/O) | `05-pdfkit-report` |
+| SQLite işlem hızı (Node.js vs Bun) | `06-db-test` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -38,7 +39,7 @@ değişmesine race condition denir.
 ## Çalıştırma
 
 Senaryo 1–4 kurulum gerektirmez (sadece Node.js; v18+ önerilir). Senaryo 5
-(pdfkit) için bir kez bağımlılık kurun: `npm install`.
+(pdfkit) ve Senaryo 6 (SQLite) için ilgili `nodejs/` klasöründe `npm install`.
 
 ```bash
 # Tek bir senaryo:
@@ -52,8 +53,13 @@ node 03-single-vs-multi-thread/multi-thread.js
 # libuv thread pool ölçümü (UV_THREADPOOL_SIZE etkisi):
 node 04-libuv-threadpool/measure.js
 
-# pdfkit ile mock veriden PDF üret (önce: npm install):
-node 05-pdfkit-report/generate.js
+# pdfkit benchmark (Senaryo 5 — önce nodejs/ içinde kurun)
+cd 05-pdfkit-report/nodejs && npm install
+
+# SQLite benchmark (Senaryo 6)
+cd 06-db-test/nodejs && npm install && npm run bench
+# Bun karşılaştırması:
+cd 06-db-test/bun && bun run bench
 
 # Hepsini bir arada:
 node run-all.js
@@ -71,7 +77,8 @@ node run-all.js
 | 2 | `02-shared-memory` | Birden fazla Worker thread'i aynı `SharedArrayBuffer`'a atomik olmadan oku-değiştir-yaz yapıyor; **gerçek data race** (lost update) | `Atomics.add` ile atomik işlem |
 | 3 | `03-single-vs-multi-thread` | Tek thread'de ağır CPU işi event loop'u **bloklar**; tek çekirdek kullanılır | İşi `worker_threads` ile çok çekirdeğe **paralel** dağıtmak |
 | 4 | `04-libuv-threadpool` | libuv thread pool varsayılan 4 thread; ağır I/O (crypto/fs) işleri pool dolunca sıra bekler | `UV_THREADPOOL_SIZE` ile pool'u büyütmek (çekirdek sınırına kadar) |
-| 5 | `05-pdfkit-report` | (race değil) pdfkit ile mock veriden fatura PDF'i üretmek; stream tabanlı dosya yazımı | — |
+| 5 | `05-pdfkit-report` | (race değil) pdfkit ile toplu PDF üretimi; seri vs worker pool benchmark (Node/Bun/Deno) | — |
+| 6 | `06-db-test` | (race değil) SQLite CRUD hızı; 10000 user seed (Node better-sqlite3 vs Bun bun:sqlite) | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -142,50 +149,58 @@ arka plandaki C++ I/O işlerinin kaç tanesinin aynı anda yürüyeceğini belir
 
 ## pdfkit ile PDF üretimi (Senaryo 5)
 
-`05-pdfkit-report/generate.js`, mock (sahte) fatura verisinden A4 bir PDF üretir:
-başlık, firma/müşteri bilgisi, kalem tablosu ve KDV'li toplamlar. pdfkit içeriği
-parça parça bir **stream**'e yazar; biz de `fs.createWriteStream` ile dosyaya
-akıtır, `stream.on("finish")` ile bitişi bekleriz (asenkron I/O).
+`05-pdfkit-report/` altında aynı benchmark üç runtime'da ayrı klasörlerde durur:
+
+| Klasör | Runtime | Worker API |
+|--------|---------|------------|
+| `nodejs/` | Node.js | `worker_threads` |
+| `bun/` | Bun | `worker_threads` |
+| `deno/` | Deno | Web `Worker` (ESM) |
+
+Her biri 3 sayfalık ağır PDF üretir (lorem + tablo + grafik), seri vs paralel
+karşılaştırması yapar ve sonuçları kendi `output/results.txt` dosyasına yazar.
 
 ```bash
-npm install            # bir kez
-node 05-pdfkit-report/generate.js
-# özel çıktı yolu:
-node 05-pdfkit-report/generate.js /tmp/fatura.pdf
+# Node.js
+cd 05-pdfkit-report/nodejs && npm install && npm run bench
+
+# Bun
+cd 05-pdfkit-report/bun && bun install && bun run bench
+
+# Deno
+cd 05-pdfkit-report/deno && deno task bench
 ```
 
-Türkçe karakter notu: pdfkit'in gömülü Helvetica fontu `ş, ğ, ı, İ` gibi
-karakterleri içermez. Demo, sistemde Türkçe destekleyen bir TTF (Liberation
-Sans, DejaVu Sans, Open Sans...) arar ve bulduğunu gömer; bulamazsa uyarı verip
-varsayılan fonta düşer. Üretilen `.pdf`/`.png` çıktıları `.gitignore`'dadır.
+Parametreler: `COUNT`, `WORKERS`, `RUNS` ortam değişkenleri (varsayılan 2000 / 8 / 20).
+Üretilen `.pdf` çıktıları `.gitignore`'dadır. Ayrıntılar: `05-pdfkit-report/README.md`.
 
 ### PDF üretimini optimize etmek (toplu üretim)
 
 Tek ve küçük bir PDF zaten milisaniyeler sürer; onu "optimize etmek" anlamsızdır.
 Asıl kazanç **çok sayıda PDF** üretirken ortaya çıkar. PDF içeriğini oluşturmak
-**CPU-bound** bir iştir ve ana JS thread'inde çalışır; yüzlerce faturayı seri
+**CPU-bound** bir iştir ve ana JS thread'inde çalışır; yüzlerce belgeyi seri
 üretmek event loop'u uzun süre meşgul eder ve yalnızca tek çekirdek kullanır.
 
-`benchmark.js`, aynı N faturayı iki şekilde üretip karşılaştırır:
+`benchmark.js`, aynı N belgeyi iki şekilde üretip karşılaştırır:
 
 - **Seri:** hepsi ana thread'de sırayla (tek çekirdek)
-- **Paralel:** `worker_threads` ile iş çekirdeklere bölünür (Senaryo 3'ün
+- **Paralel:** worker pool ile iş çekirdeklere bölünür (Senaryo 3'ün
   gerçek dünya uygulaması)
 
 ```bash
-node 05-pdfkit-report/benchmark.js
-# parametreli:
-COUNT=400 WORKERS=8 node 05-pdfkit-report/benchmark.js
+COUNT=400 WORKERS=8 node 05-pdfkit-report/nodejs/benchmark.js
+COUNT=400 WORKERS=8 bun run bench    # bun/ içinden
+COUNT=400 WORKERS=8 deno task bench  # deno/ içinden
 ```
 
-Örnek ölçüm (16 çekirdekli makine, 200 fatura, 8 worker):
+Örnek ölçüm (16 çekirdekli makine, 200 belge, 8 worker):
 
 ```
 SERİ (tek thread)       : ~9000 ms
-PARALEL (worker_threads): ~2600 ms   → ~3.3x hızlanma
+PARALEL (worker pool)   : ~2600 ms   → ~3.3x hızlanma
 ```
 
-Dosyalar: `lib/invoice.js` (mock veri + tek fatura üretimi), `worker.js`
+Dosyalar: `lib/create-counter-pdf.js` (tek PDF üretimi), `worker.js`
 (worker'a düşen dilimi üretir), `benchmark.js` (seri vs paralel ölçüm).
 
 Diğer optimizasyon notları:
@@ -195,6 +210,21 @@ Diğer optimizasyon notları:
   gerekirse `UV_THREADPOOL_SIZE` (Senaryo 4) ile artırılabilir.
 - **Stream:** PDF zaten stream olarak yazılır; tüm içeriği bellekte tutmak yerine
   parça parça diske akıtmak bellek dostudur.
+
+## SQLite işlem hızı (Senaryo 6)
+
+`06-db-test/`, 10000 kullanıcı kaydı (`id`, `username`, `name`, `surname`, `age`)
+üzerinde SQLite CRUD sürelerini Node.js (`better-sqlite3`) ve Bun (`bun:sqlite`)
+ile karşılaştırır. İkisi de paylaşımlı `06-db-test/bench.db` dosyasını kullanır
+(her işlem öncesi sıfırlanır).
+
+```bash
+cd 06-db-test/nodejs && npm install && npm run bench
+cd 06-db-test/bun && bun run bench
+```
+
+Parametreler: `COUNT` (varsayılan 10000), `RUNS` (varsayılan 20).
+Ayrıntılar: `06-db-test/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 

@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "bench": "deno run --allow-read --allow-write --allow-env benchmark.js"
+  },
+  "imports": {
+    "pdfkit": "npm:pdfkit@^0.19.1",
+    "pdf-lib": "npm:pdf-lib@^1.17.1"
+  },
+  "nodeModulesDir": "auto"
+}

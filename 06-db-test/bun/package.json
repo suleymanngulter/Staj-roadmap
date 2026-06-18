@@ -1,0 +1,9 @@
+{
+  "name": "sqlite-benchmark-bun",
+  "version": "1.0.0",
+  "description": "SQLite benchmark — Bun + bun:sqlite",
+  "scripts": {
+    "bench": "bun run benchmark.js"
+  },
+  "license": "ISC"
+}

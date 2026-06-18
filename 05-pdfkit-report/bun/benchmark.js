@@ -4,6 +4,7 @@ const { Worker } = require("worker_threads");
 const { createCounterPdf } = require("./lib/create-counter-pdf");
 const { mergePdfs } = require("./lib/merge-pdfs");
 
+const RUNTIME = `Bun ${Bun.version}`;
 const COUNT = Number(process.env.COUNT) || 2000;
 const WORKERS = Number(process.env.WORKERS) || 8;
 const RUNS = Number(process.env.RUNS) || 20;
@@ -139,6 +140,7 @@ function buildSummary(singleRuns, multiRuns) {
 
   const lines = [
     `PDF Benchmark Sonuçları (ağır içerik)`,
+    `Runtime : ${RUNTIME}`,
     `Tarih   : ${new Date().toISOString()}`,
     `COUNT   : ${COUNT}`,
     `WORKERS : ${WORKERS} (worker pool — koşular arası yeniden kullanım)`,
@@ -195,7 +197,8 @@ async function main() {
   const pool = createWorkerPool(WORKERS);
 
   console.log(
-    `COUNT=${COUNT}, WORKERS=${WORKERS} (pool), RUNS=${RUNS}\n` +
+    `Runtime: ${RUNTIME}\n` +
+      `COUNT=${COUNT}, WORKERS=${WORKERS} (pool), RUNS=${RUNS}\n` +
       `PDF: 3 sayfa, lorem + tablo + grafik\n`
   );
 

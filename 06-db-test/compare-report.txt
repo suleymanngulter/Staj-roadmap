@@ -1,0 +1,87 @@
+================================================================================
+SQLite BENCHMARK — RUNTIME KARŞILAŞTIRMA RAPORU
+================================================================================
+Tarih        : 2026-06-18
+İş yükü      : 10000 user kaydı (id, username, name, surname, age)
+DB           : 06-db-test/bench.db (paylaşımlı dosya, disk)
+               journal_mode=DELETE, synchronous=NORMAL
+Parametreler : COUNT=10000, RUNS=20 (her iki runtime'da aynı)
+Kaynaklar    : nodejs/output/results.txt
+               bun/output/results.txt
+
+Not: Node.js ve Bun aynı dosya yolunu kullanır. Her işlem öncesi bench.db
+silinip yeniden oluşturulur; runtime'lar sırayla çalıştırıldığında aynı
+dosya üzerinde ölçüm yapılır.
+
+================================================================================
+1. ÖZET TABLO (aritmetik ortalama, ms)
+================================================================================
+
+İşlem                            | Node.js (better-sqlite3) | Bun (bun:sqlite) | Fark
+---------------------------------+--------------------------+------------------+------
+INSERT transaction (10000 satır) |                    19.3 |             14.8 | Bun %23 hızlı
+INSERT tekil (autocommit)        |                 20992.0 |          20718.5 | Bun %1.3 hızlı
+SELECT *                         |                    12.2 |              3.2 | Bun %74 hızlı
+SELECT WHERE age > 30            |                    10.5 |              3.3 | Bun %69 hızlı
+UPDATE age = age + 1             |                    12.4 |             12.3 | ~eşit
+DELETE id > 7500                 |                     4.3 |              4.5 | ~eşit
+---------------------------------+--------------------------+------------------+------
+TOPLAM (tüm işlemler)            |                 21050.7 |          20756.6 | Bun %1.4 hızlı
+
+================================================================================
+2. 2000 vs 10000 KARŞILAŞTIRMASI (önceki → şimdiki)
+================================================================================
+
+Önceki COUNT=2000 toplam:
+  Node.js ~4489 ms  |  Bun ~4472 ms
+
+Şimdiki COUNT=10000 toplam:
+  Node.js ~21051 ms  |  Bun ~20757 ms
+
+Ölçekleme (~5x kayıt):
+  Tekil INSERT: ~4.5 s → ~21 s (doğrusal, disk fsync başına)
+  Transaction INSERT: ~6 ms → ~19 ms (doğrusal)
+  SELECT *: ~3 ms → ~12 ms (Node), ~1 ms → ~3 ms (Bun)
+  UPDATE/DELETE: hafif artış (~3–5 ms → ~4–13 ms)
+
+10000 kayıtta runtime farkları daha net görünüyor; SELECT'te Bun avantajı
+2000'dekinden daha belirgin (3 ms vs 12 ms).
+
+================================================================================
+3. GENEL DEĞERLENDİRME
+================================================================================
+
+Kazanan (genel) : Bun — toplam ~294 ms (%1.4) daha hızlı; fark hâlâ ölçüm
+gürültüsü sınırında ama 2000 kayıtta görülemeyen SELECT farkı netleşti.
+
+En kritik bulgu : Tekil INSERT (autocommit) diskte ~1080x yavaş transaction'a
+göre (20992 ms vs 19 ms). Üretimde mutlaka transaction + prepared statement.
+
+SELECT : Bun belirgin önde (3.2 vs 12.2 ms SELECT *). 10000 satırda fark
+anlamlı hale geldi; toplam sürenin hâlâ <%0.1'i.
+
+INSERT tekil : İki runtime neredeyse identik (~21 s) — darboğaz SQLite disk
+fsync, runtime değil.
+
+UPDATE / DELETE : Disk I/O ile ~4–13 ms; kayıt sayısı arttıkça UPDATE biraz
+yükseldi (12 ms).
+
+================================================================================
+4. PRATİK SONUÇLAR
+================================================================================
+
+1. 10000 kayıt daha anlamlı bir iş yükü; SELECT farkları ölçülebilir hale geldi.
+2. Runtime seçimi (Node vs Bun) yazma ağırlıklı disk iş yükünde ikincil;
+   transaction kullanımı birincil.
+3. Bun SELECT ve transaction INSERT'te hafif avantajlı; tekil INSERT'te fark yok.
+4. bench.db son koşudan sonra diskte kalır (~760 KB); incelemek için açılabilir.
+
+================================================================================
+5. SONUÇ (tek cümle)
+================================================================================
+
+10000 kayıtta Node.js ve Bun toplamda yakın (~21 s); asıl fark transaction
+kullanımından geliyor (19 ms vs 21000 ms) — runtime değil, SQL kullanım kalıbı
+belirleyici; Bun SELECT ve batch INSERT'te hafif üstün.
+
+================================================================================

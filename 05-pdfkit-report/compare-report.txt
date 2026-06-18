@@ -1,0 +1,129 @@
+================================================================================
+PDF BENCHMARK — RUNTIME KARŞILAŞTIRMA RAPORU
+================================================================================
+Tarih        : 2026-06-17
+İş yükü      : 2000 PDF × 3 sayfa (lorem + tablo + grafik), pdfkit + pdf-lib merge
+Parametreler : COUNT=2000, WORKERS=8, RUNS=20 (tüm runtime'larda aynı)
+Kaynaklar    : nodejs/output/results.txt
+               bun/output/results.txt
+               deno/output/results.txt
+
+================================================================================
+1. ÖZET TABLO (üretim — aritmetik ortalama, 20 koşu)
+================================================================================
+
+Runtime          | Seri (ms) | Paralel (ms) | Hızlanma | Merge seri | Merge paralel
+-----------------+-----------+--------------+----------+------------+--------------
+Node.js v22.22.2 |    9082.5 |       2398.9 |    3.79x |      1476 ms |       1575 ms
+Bun 1.3.14       |    8298.1 |       2244.7 |    3.70x |      1560 ms |       1776 ms
+Deno 2.8.3       |    9001.1 |       2424.4 |    3.71x |      1970 ms |       2023 ms
+
+Node.js'e göre seri üretim:
+  Bun  → %8.6 daha hızlı  (8298 / 9083)
+  Deno → %0.9 daha hızlı  (9001 / 9083) — pratikte eşdeğer
+
+Node.js'e göre paralel üretim:
+  Bun  → %6.4 daha hızlı  (2245 / 2399)
+  Deno → %1.1 daha yavaş  (2424 / 2399) — fark ihmal edilebilir
+
+================================================================================
+2. TOPLAM SÜRE (ortalama üretim + son koşu merge)
+================================================================================
+
+Runtime   | Seri toplam | Paralel toplam | Genel hızlanma
+----------+-------------+----------------+----------------
+Node.js   |   10558 ms  |        3974 ms |            2.66x
+Bun       |    9858 ms  |        4021 ms |            2.45x
+Deno      |   10971 ms  |        4447 ms |            2.47x
+
+Not: Merge yalnızca 20. koşuda ölçüldü; üretim ortalaması 20 koşunun ortalaması.
+
+================================================================================
+3. PARALELİZASYON ETKİSİ (tüm runtime'larda tutarlı)
+================================================================================
+
+Üç ortamda da 8 worker pool ile üretim süresi yaklaşık 3.7–3.8 kat kısaldı.
+Bu, Senaryo 3'teki CPU-bound iş + worker_threads modelinin gerçek dünyada
+çalıştığını doğruluyor: PDF üretimi ana thread'i bloke eden iş; worker'lara
+bölmek çok çekirdekten yararlanıyor.
+
+Paralel kazanç runtime'dan bağımsız ve benzer → darboğaz büyük ölçüde pdfkit
+üretim mantığında; runtime seçimi paralel ölçeklenmeyi bozmuyor.
+
+================================================================================
+4. RUNTIME BAZLI GÖZLEMLER
+================================================================================
+
+Node.js v22.22.2
+  + En hızlı merge (1476 / 1575 ms) — pdf-lib birleştirmede önde
+  + Paralel üretimde en yüksek hızlanma (3.79x)
+  + Koşular ilerledikçe süre düştü (ilk koşu ~9756 ms → son ~8095 ms): JIT ısınması
+  − Seri üretimde Bun'dan ~%9 yavaş
+
+Bun 1.3.14
+  + En hızlı seri ve paralel üretim ortalaması
+  + Tek thread'de Node'a göre belirgin avantaj (~750 ms / 2000 PDF)
+  − Son koşuda seri üretim sıçradı (10722 ms; önceki koşular ~7800–8800 ms)
+    → muhtemelen GC veya merge öncesi bellek baskısı; ortalamayı biraz şişirir
+  − Merge Node'dan ~%5–13 daha yavaş
+
+Deno 2.8.3
+  + Paralel hızlanma Node/Bun ile aynı mertebede (3.71x)
+  + Web Worker (ESM) modeli sorunsuz çalıştı; ölçüm Node/Bun ile karşılaştırılabilir
+  − İlk koşu çok yavaş (12034 ms) — Deno/V8 ısınma maliyeti
+  − En yavaş merge (~1970 / 2023 ms); npm: uyumluluk katmanı ek yük getiriyor olabilir
+  − Seri üretim Node ile benzer; Bun'dan ~%8 yavaş
+
+================================================================================
+5. GENEL DEĞERLENDİRME
+================================================================================
+
+Kazanan (ham üretim hızı)     : Bun
+Kazanan (merge / toplam akış) : Node.js (merge hafif avantajı)
+En tutarlı paralel ölçekleme  : Node.js (3.79x) — fark küçük
+En yavaş alan                 : Deno merge + soğuk başlangıç
+
+Pratik sonuçlar:
+
+  1. CPU-bound PDF üretimi için worker pool üç runtime'da da şart; seri mod
+     ~8–10 saniye, paralel ~2.2–2.4 saniye (2000 belge).
+
+  2. Sadece üretim hızına bakılırsa Bun önde. Fark ~800 ms / 2000 PDF (~%8);
+     tek seferlik küçük işlerde anlamsız, toplu batch'te birikir.
+
+  3. Üretim + merge birlikte düşünülürse Node.js ve Bun başa baş (toplam ~4 s
+     paralel). Deno merge yüzünden ~400–500 ms geride.
+
+  4. Runtime seçimi bu benchmark'ta "hangisi 10x hızlı" sorusunu cevaplamıyor;
+     asıl kazanç mimariden geliyor (seri → 8 worker). Runtime farkı %5–10 bandında.
+
+  5. Üretim ortamı önerisi:
+     - Mevcut Node ekosistemi / en olgun deploy → Node.js
+     - Maksimum üretim throughput, Bun toolchain kabul edilebilir → Bun
+     - Deno tercih politikası (izin modeli, tek binary) → performans kabul edilebilir,
+       ilk istek/soğuk start ve merge için ek tampon bırak
+
+================================================================================
+6. SINIRLAMALAR VE TEKRARLANABİLİRLİK NOTLARI
+================================================================================
+
+- Ölçümler aynı makinede farklı saatlerde alındı (Node 11:40, Bun 11:51, Deno 11:54 UTC).
+  Arka plan yükü, CPU frekansı ve termal throttling sonuçları etkileyebilir.
+- Deno Web Worker, Node/Bun worker_threads'ten farklı API; iş mantığı aynı olsa da
+  worker başlatma/mesajlaşma overhead'i küçük fark yaratabilir.
+- Son koşudaki merge 2000 PDF birleştirme — ağır I/O + bellek; tek ölçüm noktası.
+- Bun koşu 20 seri sıçraması outlier; tekrar ölçümde ortalama düşebilir.
+
+Önerilen tekrar: Üç benchmark'ı arka arkaya, makine boşken, aynı COUNT/WORKERS ile
+çalıştırıp bu raporu güncellemek.
+
+================================================================================
+7. SONUÇ (tek cümle)
+================================================================================
+
+Worker pool olmadan runtime seçimi anlamsız; paralel mimari ~3.7x kazandırır.
+Runtime'lar arasında üretimde Bun hafif önde, merge'de Node hafif önde, Deno
+kullanılabilir ama merge ve soğuk start'ta biraz geride — hepsi aynı mimariyle
+üretimde Node.js'e göre yakın performans gösterir.
+
+================================================================================

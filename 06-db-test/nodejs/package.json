@@ -1,0 +1,12 @@
+{
+  "name": "sqlite-benchmark-nodejs",
+  "version": "1.0.0",
+  "description": "SQLite benchmark — Node.js + better-sqlite3",
+  "scripts": {
+    "bench": "node benchmark.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.9.1"
+  }
+}

@@ -1,0 +1,49 @@
+PDF Benchmark Sonuçları (ağır içerik)
+Runtime : Deno 2.8.3
+Tarih   : 2026-06-17T11:54:58.567Z
+COUNT   : 2000
+WORKERS : 8 (worker pool — koşular arası yeniden kullanım)
+RUNS    : 20
+PDF     : 3 sayfa (başlık + lorem + tablo + grafik), belge başına farklı içerik
+Not     : Merge yalnızca son koşuda ölçülür (2000 belge birleştirme çok ağır)
+
+--- Koşu bazlı süreler ---
+Koşu  1 | single: üretim 12034 ms, merge —, toplam 12034 ms | multi:  üretim 2609 ms, merge —, toplam 2609 ms
+Koşu  2 | single: üretim 9141 ms, merge —, toplam 9141 ms | multi:  üretim 2474 ms, merge —, toplam 2474 ms
+Koşu  3 | single: üretim 8730 ms, merge —, toplam 8730 ms | multi:  üretim 2558 ms, merge —, toplam 2558 ms
+Koşu  4 | single: üretim 8768 ms, merge —, toplam 8768 ms | multi:  üretim 2379 ms, merge —, toplam 2379 ms
+Koşu  5 | single: üretim 9255 ms, merge —, toplam 9255 ms | multi:  üretim 2278 ms, merge —, toplam 2278 ms
+Koşu  6 | single: üretim 8561 ms, merge —, toplam 8561 ms | multi:  üretim 2370 ms, merge —, toplam 2370 ms
+Koşu  7 | single: üretim 8792 ms, merge —, toplam 8792 ms | multi:  üretim 2469 ms, merge —, toplam 2469 ms
+Koşu  8 | single: üretim 8769 ms, merge —, toplam 8769 ms | multi:  üretim 2454 ms, merge —, toplam 2454 ms
+Koşu  9 | single: üretim 9060 ms, merge —, toplam 9060 ms | multi:  üretim 2395 ms, merge —, toplam 2395 ms
+Koşu 10 | single: üretim 8797 ms, merge —, toplam 8797 ms | multi:  üretim 2326 ms, merge —, toplam 2326 ms
+Koşu 11 | single: üretim 8826 ms, merge —, toplam 8826 ms | multi:  üretim 2418 ms, merge —, toplam 2418 ms
+Koşu 12 | single: üretim 8627 ms, merge —, toplam 8627 ms | multi:  üretim 2428 ms, merge —, toplam 2428 ms
+Koşu 13 | single: üretim 9233 ms, merge —, toplam 9233 ms | multi:  üretim 2633 ms, merge —, toplam 2633 ms
+Koşu 14 | single: üretim 9398 ms, merge —, toplam 9398 ms | multi:  üretim 2455 ms, merge —, toplam 2455 ms
+Koşu 15 | single: üretim 8714 ms, merge —, toplam 8714 ms | multi:  üretim 2363 ms, merge —, toplam 2363 ms
+Koşu 16 | single: üretim 8724 ms, merge —, toplam 8724 ms | multi:  üretim 2372 ms, merge —, toplam 2372 ms
+Koşu 17 | single: üretim 8660 ms, merge —, toplam 8660 ms | multi:  üretim 2425 ms, merge —, toplam 2425 ms
+Koşu 18 | single: üretim 8660 ms, merge —, toplam 8660 ms | multi:  üretim 2264 ms, merge —, toplam 2264 ms
+Koşu 19 | single: üretim 8565 ms, merge —, toplam 8565 ms | multi:  üretim 2558 ms, merge —, toplam 2558 ms
+Koşu 20 | single: üretim 8709 ms, merge 1970 ms, toplam 10679 ms | multi:  üretim 2260 ms, merge 2023 ms, toplam 4283 ms
+
+--- Aritmetik ortalama (20 koşu, üretim) ---
+SINGLE-THREAD
+  Üretim (ort.) : 9001.1 ms
+  Merge (son)   : 1970 ms
+  Üretim (son)  : 8709 ms
+
+MULTI-THREAD (8 worker, pool)
+  Üretim (ort.) : 2424.4 ms
+  Merge (son)   : 2023 ms
+  Üretim (son)  : 2260 ms
+
+--- Hızlanma ---
+Üretim (ortalama)     : 3.71x
+Toplam (ort. üretim + son merge) : 2.47x
+
+PDF çıktıları: /home/suleymangulter/race-conditions/05-pdfkit-report/deno/output/
+  merged-single-thread.pdf
+  merged-multi-thread.pdf

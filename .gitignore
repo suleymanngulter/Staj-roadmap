@@ -9,6 +9,16 @@ yarn-error.log*
 .vscode/
 
 # pdfkit demosunun ürettiği çıktılar (kod çalışınca yeniden oluşur)
-05-pdfkit-report/*.pdf
-05-pdfkit-report/*.png
+05-pdfkit-report/**/*.pdf
+
+05-pdfkit-report/**/node_modules/
+05-pdfkit-report/deno/node_modules/
+
+# db benchmark çıktıları
+06-db-test/bench.db
+06-db-test/bench.db-wal
+06-db-test/bench.db-shm
+06-db-test/**/output/
+06-db-test/**/*.db
+06-db-test/**/node_modules/
 

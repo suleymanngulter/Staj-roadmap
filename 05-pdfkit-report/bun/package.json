@@ -1,0 +1,14 @@
+{
+  "name": "pdfkit-benchmark-bun",
+  "version": "1.0.0",
+  "description": "PDF benchmark — Bun runtime",
+  "scripts": {
+    "bench": "bun run benchmark.js"
+  },
+  "author": "suleymanngulter",
+  "license": "ISC",
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfkit": "^0.19.1"
+  }
+}

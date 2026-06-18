@@ -4,9 +4,8 @@
   "description": "Comparing multi-thread and single-thread performance on pdfkit",
   "main": "index.js",
   "scripts": {
-    "start": "node benchmark.js",
     "bench": "node benchmark.js"
-},
+  },
   "author": "suleymanngulter",
   "license": "ISC",
   "dependencies": {
