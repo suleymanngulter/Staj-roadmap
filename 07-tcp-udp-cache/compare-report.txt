@@ -1,0 +1,262 @@
+================================================================================
+TCP/UDP → REDIS → RABBITMQ BENCHMARK — İSTATİSTİKSEL KARŞILAŞTIRMA RAPORU
+================================================================================
+Tarih        : 2026-06-18
+İş yükü      : 10000 kullanıcı Redis cache seed; senaryo başına 5000 istek
+Altyapı      : Redis 7, RabbitMQ 3 (docker compose)
+Parametreler : COUNT=10000, REQUESTS=5000, CONCURRENCY=100, RUNS=5 (n=5)
+Kaynaklar    : nodejs/output/results.txt
+               bun/output/results.txt
+
+Akış: İstemci JSON {"userId":"..."} → Redis EXISTS user:{id}
+      → cache hit: RabbitMQ publish + OK | cache miss: REJECT
+
+Önemli not (metodoloji):
+  - n=5 koşu ile istatistiksel güç sınırlıdır; %95 GA geniş, p-değerleri
+    yönlendirici kabul edilmelidir. Kesin sonuç için RUNS≥20 önerilir.
+  - Node.js ve Bun sıralı (bağımsız) koşuldu; eşleştirilmiş (paired) test
+    uygulanmadı. Karşılaştırma: Welch bağımsız örneklem t-testi.
+  - Anlamlılık: %95 güven aralıkları örtüşmüyorsa VE p<0.05 → "istatistiksel
+    olarak anlamlı" (bu raporda ✓ işareti).
+
+Kısaltmalar:
+  μ  = aritmetik ortalama (mean)     σ  = örneklem std sapma (n-1)
+  CV = σ/μ × 100 (değişim katsayısı) GA = %95 güven aralığı (t dağılımı)
+  d  = Cohen's d (etki büyüklüğü)    |d|<0.2 önemsiz, 0.2–0.5 küçük,
+                                      0.5–0.8 orta, >0.8 büyük
+
+================================================================================
+1. HAM KOŞU VERİLERİ (wall ms | rps | p50 ms)
+================================================================================
+
+--- Node.js v22.22.2 ---
+Koşu | tcpAccept        | tcpReject        | udpAccept        | udpReject        | tcpMixed         | udpMixed
+-----+------------------+------------------+------------------+------------------+------------------+------------------
+  1  | 587 | 8518 | 10.3 | 352 | 14205 | 6.8 | 164 | 30488 | 3.1 | 137 | 36496 | 2.5 | 404 | 12376 | 7.9 | 139 | 35971 | 2.6
+  2  | 436 | 11468 | 8.6 | 358 | 13966 | 6.8 | 156 | 32051 | 2.9 | 133 | 37594 | 2.6 | 560 | 8929 | 9.6 | 141 | 35461 | 2.7
+  3  | 413 | 12107 | 8.1 | 352 | 14205 | 7.0 | 145 | 34483 | 2.8 | 138 | 36232 | 2.5 | 404 | 12376 | 7.9 | 140 | 35714 | 2.7
+  4  | 400 | 12500 | 7.8 | 347 | 14409 | 6.8 | 142 | 35211 | 2.7 | 125 | 40000 | 2.4 | 409 | 12225 | 7.8 | 137 | 36496 | 2.6
+  5  | 407 | 12285 | 8.0 | 355 | 14085 | 6.9 | 159 | 31447 | 2.8 | 165 | 30303 | 3.1 | 542 | 9225 | 9.5 | 151 | 33113 | 2.8
+
+--- Bun 1.3.14 ---
+Koşu | tcpAccept        | tcpReject        | udpAccept        | udpReject        | tcpMixed         | udpMixed
+-----+------------------+------------------+------------------+------------------+------------------+------------------
+  1  | 400 | 12500 | 7.2 | 299 | 16722 | 5.9 | 175 | 28571 | 3.3 | 126 | 39683 | 2.3 | 319 | 15674 | 6.3 | 149 | 33557 | 2.9
+  2  | 334 | 14970 | 6.6 | 284 | 17606 | 5.6 | 141 | 35461 | 2.7 | 110 | 45455 | 2.1 | 295 | 16949 | 5.8 | 141 | 35461 | 2.7
+  3  | 293 | 17065 | 5.7 | 270 | 18519 | 5.1 | 147 | 34014 | 2.8 | 108 | 46296 | 2.1 | 320 | 15625 | 5.8 | 137 | 36496 | 2.6
+  4  | 397 | 12594 | 7.7 | 258 | 19380 | 5.0 | 147 | 34014 | 2.7 | 120 | 41667 | 2.2 | 286 | 17483 | 5.6 | 142 | 35211 | 2.6
+  5  | 299 | 16722 | 5.9 | 288 | 17361 | 5.2 | 154 | 32468 | 3.0 | 107 | 46729 | 2.0 | 284 | 17606 | 5.5 | 152 | 32895 | 2.9
+
+================================================================================
+2. BETİMSEL İSTATİSTİKLER — WALL SÜRE (ms, düşük = iyi)
+================================================================================
+
+Senaryo       | Runtime |  μ    | Median |  σ   |  CV%  | Min–Max   | %95 GA
+--------------+---------+-------+--------+------+-------+-----------+------------------
+TCP kabul     | Node.js | 448.6 |  413   | 78.5 | 17.5% | 400–587   | [351 – 546]
+              | Bun     | 344.6 |  334   | 51.6 | 15.0% | 293–400   | [280 – 409]
+TCP red       | Node.js | 352.8 |  352   |  4.1 |  1.2% | 347–358   | [348 – 358]
+              | Bun     | 279.8 |  284   | 16.0 |  5.7% | 258–299   | [260 – 300]
+UDP kabul     | Node.js | 153.2 |  156   |  9.4 |  6.1% | 142–164   | [142 – 165]
+              | Bun     | 152.8 |  152   | 12.8 |  8.4% | 141–175   | [136 – 170]
+UDP red       | Node.js | 139.6 |  137   | 15.1 | 10.8% | 125–165   | [121 – 158]
+              | Bun     | 114.2 |  110   |  8.4 |  7.3% | 107–126   | [104 – 125]
+TCP karışık   | Node.js | 463.8 |  409   | 79.9 | 17.2% | 404–560   | [365 – 563]
+              | Bun     | 300.8 |  295   | 17.6 |  5.8% | 284–320   | [279 – 323]
+UDP karışık   | Node.js | 141.6 |  140   |  5.5 |  3.9% | 137–151   | [135 – 148]
+              | Bun     | 144.2 |  142   |  6.1 |  4.3% | 137–152   | [137 – 152]
+
+Ölçüm kararlılığı (CV):
+  - En kararlı: TCP red Node.js (CV 1.2%) — dar dağılım, tekrarlanabilir.
+  - En değişken: TCP kabul/karışık Node.js (CV ~17%) — 1. koşu outlier (587 ms).
+  - Bun TCP senaryoları Node'a göre daha düşük CV (karışık: 5.8% vs 17.2%).
+
+================================================================================
+3. BETİMSEL İSTATİSTİKLER — THROUGHPUT (rps, yüksek = iyi)
+================================================================================
+
+Senaryo       | Runtime |  μ     | Median |  σ    |  CV%  | Min–Max      | %95 GA
+--------------+---------+--------+--------+-------+-------+--------------+-------------------
+TCP kabul     | Node.js | 11 376 | 12 107 | 1 643 | 14.4% |  8518–12500  | [9336 – 13416]
+              | Bun     | 14 770 | 14 970 | 2 180 | 14.8% | 12500–17065  | [12064 – 17476]
+TCP red       | Node.js | 14 174 | 14 205 |   165 |  1.2% | 13966–14409  | [13970 – 14378]
+              | Bun     | 17 918 | 17 606 | 1 041 |  5.8% | 16722–19380  | [17024 – 18812]
+UDP kabul     | Node.js | 32 736 | 32 051 | 2 022 |  6.2% | 30488–35211  | [30225 – 35247]
+              | Bun     | 32 906 | 34 014 | 1 731 |  5.3% | 28571–35461  | [31106 – 34706]
+UDP red       | Node.js | 36 125 | 36 496 | 3 578 |  9.9% | 30303–40000  | [31683 – 40567]
+              | Bun     | 43 966 | 45 455 | 3 119 |  7.1% | 39683–46729  | [40094 – 47838]
+TCP karışık   | Node.js | 11 026 | 12 225 | 1 784 | 16.2% |  8929–12376  | [8812 – 13240]
+              | Bun     | 16 667 | 16 949 |   962 |  5.8% | 15625–17606  | [15474 – 17861]
+UDP karışık   | Node.js | 35 351 | 35 714 | 1 308 |  3.7% | 33113–36496  | [33727 – 36975]
+              | Bun     | 34 724 | 35 211 | 1 469 |  4.2% | 32895–36496  | [32901 – 36547]
+
+================================================================================
+4. BETİMSEL İSTATİSTİKLER — p50 GECİKME (ms, düşük = iyi)
+================================================================================
+
+Senaryo       | Runtime |  μ   | Median |  σ   |  CV%  | Min–Max  | %95 GA
+--------------+---------+------+--------+------+-------+----------+----------------
+TCP kabul     | Node.js |  8.6 |   8.1  |  1.0 | 11.9% | 7.8–10.3 | [7.3 – 9.8]
+              | Bun     |  6.6 |   6.6  |  0.8 | 12.8% | 5.7–7.7  | [5.6 – 7.7]
+TCP red       | Node.js |  6.9 |   6.8  |  0.1 |  1.3% | 6.8–7.0  | [6.7 – 7.0]
+              | Bun     |  5.4 |   5.6  |  0.7 | 13.0% | 5.0–5.9  | [4.9 – 5.9]
+UDP kabul     | Node.js |  2.9 |   2.8  |  0.2 |  5.3% | 2.7–3.1  | [2.7 – 3.0]
+              | Bun     |  2.9 |   2.8  |  0.2 |  6.8% | 2.7–3.3  | [2.7 – 3.1]
+UDP red       | Node.js |  2.6 |   2.5  |  0.3 | 10.6% | 2.4–3.1  | [2.3 – 3.0]
+              | Bun     |  2.1 |   2.1  |  0.1 |  5.3% | 2.0–2.3  | [2.0 – 2.3]
+TCP karışık   | Node.js |  8.5 |   7.9  |  0.9 | 10.8% | 7.8–9.6  | [7.4 – 9.7]
+              | Bun     |  5.8 |   5.8  |  0.3 |  5.3% | 5.5–6.3  | [5.4 – 6.2]
+UDP karışık   | Node.js |  2.7 |   2.7  |  0.1 |  3.1% | 2.6–2.8  | [2.6 – 2.8]
+              | Bun     |  2.7 |   2.7  |  0.2 |  5.5% | 2.6–2.9  | [2.6 – 2.9]
+
+================================================================================
+5. NODE.JS vs BUN — WELCH t-TESTİ VE ETKİ BÜYÜKLÜĞÜ
+================================================================================
+
+Metrik: wall süre (ms) — Bun daha düşük wall = Bun daha hızlı
+
+Senaryo       | Δμ (Node−Bun) | Δ%    | t     | p       | Cohen d | GA örtüşme | Anlamlı
+--------------+---------------+-------+-------+---------+---------+------------+--------
+TCP kabul     |   +104.0 ms   | +30%  |  2.47 | <0.05   |  1.56   | evet       | hayır*
+TCP red       |    +73.0 ms   | +26%  |  9.88 | <0.001  |  6.25   | hayır      | ✓
+UDP kabul     |     +0.4 ms   |  +0%  |  0.06 | ≥0.05   |  0.03   | evet       | hayır
+UDP red       |    +25.4 ms   | +22%  |  3.29 | <0.05   |  2.08   | evet       | hayır*
+TCP karışık   |   +163.0 ms   | +54%  |  4.46 | <0.05   |  2.82   | hayır      | ✓
+UDP karışık   |     −2.6 ms   |  −2%  | −0.71 | ≥0.05   | −0.45   | evet       | hayır
+
+Metrik: throughput (rps) — Bun daha yüksek rps = Bun daha hızlı
+
+Senaryo       | Δμ (Node−Bun) | Δ%     | t      | p       | Cohen d | Anlamlı
+--------------+---------------+--------+--------+---------+---------+--------
+TCP kabul     |   −3 394 rps  |  −23%  |  −2.78 | <0.05   | −1.76   | hayır*
+TCP red       |   −3 744 rps  |  −21%  |  −7.94 | <0.01   | −5.02   | ✓
+UDP kabul     |     −170 rps  |   −1%  |  −0.11 | ≥0.05   | −0.07   | hayır
+UDP red       |   −7 841 rps  |  −18%  |  −3.69 | <0.01   | −2.34   | hayır*
+TCP karışık   |   −5 641 rps  |  −34%  |  −6.23 | <0.001  | −3.94   | ✓
+UDP karışık   |     +627 rps  |   +2%  |  +0.71 | ≥0.05   | +0.45   | hayır
+
+Metrik: p50 gecikme (ms)
+
+Senaryo       | Δμ (Node−Bun) | Δ%    | t     | p       | Cohen d | Anlamlı
+--------------+---------------+-------+-------+---------+---------+--------
+TCP kabul     |    +1.9 ms    | +29%  |  3.28 | <0.05   |  2.07   | hayır*
+TCP red       |    +1.5 ms    | +28%  |  8.63 | <0.001  |  5.46   | ✓
+UDP kabul     |    −0.0 ms    |  −1%  | −0.30 | ≥0.05   | −0.19   | hayır
+UDP red       |    +0.5 ms    | +22%  |  3.58 | <0.05   |  2.26   | hayır*
+TCP karışık   |    +2.7 ms    | +47%  |  6.29 | <0.01   |  3.98   | ✓
+UDP karışık   |    −0.1 ms    |  −2%  | −0.77 | ≥0.05   | −0.49   | hayır
+
+* p<0.05 ama %95 GA örtüşüyor → n=5 sınırı; "sınırda anlamlı", teyit gerekir.
+
+Hız oranı (Node wall / Bun wall, >1 = Bun hızlı):
+
+  TCP kabul: 1.30×   TCP red: 1.26×   UDP kabul: 1.00×
+  UDP red:   1.22×   TCP karışık: 1.54×   UDP karışık: 0.98×
+
+================================================================================
+6. PROTOKOL KARŞILAŞTIRMASI (aynı runtime içinde, μ wall ms)
+================================================================================
+
+Oran (TCP kabul / UDP kabul):
+  Node.js: 448.6 / 153.2 = 2.93×  (TCP %193 daha yavaş)
+  Bun:     344.6 / 152.8 = 2.26×  (TCP %126 daha yavaş)
+
+Oran (TCP red / UDP red):
+  Node.js: 352.8 / 139.6 = 2.53×
+  Bun:     279.8 / 114.2 = 2.45×
+
+Cache hit vs miss (RabbitMQ publish etkisi, aynı protokol):
+
+  Node.js TCP: kabul 448.6 ms vs red 352.8 ms → hit %27 daha yavaş (μ fark +95.8 ms)
+  Bun     TCP: kabul 344.6 ms vs red 279.8 ms → hit %23 daha yavaş (+64.8 ms)
+  Node.js UDP: kabul 153.2 ms vs red 139.6 ms → hit %10 daha yavaş (+13.6 ms)
+  Bun     UDP: kabul 152.8 ms vs red 114.2 ms → hit %34 daha yavaş (+38.6 ms)
+
+Karışık vs saf kabul (TCP, Node.js):
+  tcpMixed μ=463.8 vs tcpAccept μ=448.6 → fark +15.2 ms (%3.4); dağılım çok geniş
+  (σ 79.9 vs 78.5). %20 red oranı wall süresini doğrudan uzatmıyor; değişkenlik
+  TCP event loop / bağlantı yönetiminden kaynaklanıyor.
+
+================================================================================
+7. AYKIRI DEĞER (OUTLIER) ANALİZİ
+================================================================================
+
+IQR yöntemi (Q1−1.5·IQR, Q3+1.5·IQR):
+
+  Node.js tcpAccept: Q1=400, Q3=436, IQR=36 → üst sınır 490
+    → Koşu 1 (587 ms) aykırı; çıkarılırsa μ=421.8 ms (Δ−26.8 ms, −6.0%)
+
+  Node.js tcpMixed: Koşu 2 (560 ms) ve Koşu 5 (542 ms) yüksek;
+    medyan (409 ms) ortalamadan (464 ms) %12 düşük → sağa çarpık dağılım.
+
+  Node.js udpReject: Koşu 5 (165 ms, rps 30303) düşük throughput outlier;
+    medyan 137 ms, μ 139.6 ms — hafif çarpıklık.
+
+  Bun tcpAccept: Koşu 3 (293 ms) en hızlı; geniş aralık (293–400) ama aykırı yok.
+
+Sonuç: Node.js TCP ölçümleri 1–2 koşuda yüksek wall ile şişiyor; medyan
+       karşılaştırması Bun lehine daha da güçlenir (TCP kabul medyan: 413 vs 334).
+
+================================================================================
+8. GÜVENİLİRLİK VE ÖRNEKLEM BÜYÜKLÜĞÜ
+================================================================================
+
+Mevcut n=5 ile tipik marjinal hata (wall, TCP kabul):
+  Node.js: ±97.5 ms (GA genişliği) → μ=448.6 ± %22
+  Bun:     ±64.1 ms              → μ=344.6 ± %19
+
+RUNS=20'de beklenen iyileşme (σ sabit, SE ∝ 1/√n):
+  Marjinal hata ~2.24× daralır ( √(20/5) = 2 ).
+
+Güç analizi (kabaca):
+  TCP karışık wall farkı (163 ms, pooled σ≈50): n=5 yeterli sinyal üretiyor (✓).
+  UDP kabul farkı (0.4 ms, σ≈11): algılanamaz; gerçekten fark yok (d≈0.03).
+
+Önerilen tekrar: RUNS=20, aynı makine, servisleri benchmark öncesi yeniden başlat.
+
+================================================================================
+9. GENEL DEĞERLENDİRME (istatistiksel)
+================================================================================
+
+Kesin anlamlı fark (GA örtüşmez + p<0.05):
+  ✓ TCP red — wall, rps, p50 (Bun üstün; d=5–6, büyük etki)
+  ✓ TCP karışık — wall, rps, p50 (Bun üstün; d=3–4, büyük etki)
+
+Anlamlı fark yok (μ farkı ~0 veya GA örtüşür):
+  · UDP kabul — tüm metrikler (d<0.2)
+  · UDP karışık — tüm metrikler (d<0.5)
+
+Sınırda / teyit gerekli (p<0.05 ama GA örtüşür veya n küçük):
+  · TCP kabul, UDP red
+
+En kararlı ölçüm: TCP red Node.js (CV 1.2%); en değişken: TCP kabul/karışık Node.
+
+Birincil bulgu (istatistiksel):
+  Runtime farkı protokole bağlı. TCP senaryolarında Bun'un üstünlüğü orta-büyük
+  etki (d>0.8); UDP'de sıfıra yakın etki. Protokol farkı (TCP vs UDP) her iki
+  runtime'da da büyük etki (2.3–2.9×). RabbitMQ publish yolu TCP'de %23–27,
+  UDP'de %10–34 ek wall süresi ekliyor.
+
+================================================================================
+10. PRATİK SONUÇLAR
+================================================================================
+
+1. Karar için UDP kabul yolunda runtime seçimi istatistiksel olarak önemsiz.
+2. TCP ağırlıklı iş yükünde Bun anlamlı avantajlı; özellikle karışık trafikte
+   (μ %54 daha hızlı wall, d=2.82).
+3. Node.js TCP ölçümlerinde yüksek değişkenlik (CV ~17%); prod ortamında
+   connection pooling / keep-alive ile tekrar ölçülmeli.
+4. Kesin rapor için: RUNS=20, outlier koşuları not et, medyan + μ birlikte raporla.
+5. Altyapı: docker compose up -d (Redis + RabbitMQ)
+
+================================================================================
+11. SONUÇ (tek cümle)
+================================================================================
+
+n=5 koşuda UDP yolunda Node.js ile Bun istatistiksel olarak ayırt edilemez
+(d≈0); TCP yolunda Bun anlamlı ve büyük etkiyle üstün (özellikle red ve karışık
+senaryolar, d>2), asıl throughput farkı protokol seçiminden gelir (TCP ~2.5×
+yavaş) — RabbitMQ publish cache hit yoluna TCP'de ~+65–96 ms, UDP'de ~+14–39 ms
+ek maliyet getirir.
+
+================================================================================

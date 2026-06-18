@@ -25,6 +25,7 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | libuv thread pool'u büyütmek (`UV_THREADPOOL_SIZE`) ve etkisini ölçmek | `04-libuv-threadpool` |
 | pdfkit ile mock veriden PDF üretmek (stream tabanlı I/O) | `05-pdfkit-report` |
 | SQLite işlem hızı (Node.js vs Bun) | `06-db-test` |
+| TCP/UDP → Redis cache → RabbitMQ (Node.js vs Bun) | `07-tcp-udp-cache` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -79,6 +80,7 @@ node run-all.js
 | 4 | `04-libuv-threadpool` | libuv thread pool varsayılan 4 thread; ağır I/O (crypto/fs) işleri pool dolunca sıra bekler | `UV_THREADPOOL_SIZE` ile pool'u büyütmek (çekirdek sınırına kadar) |
 | 5 | `05-pdfkit-report` | (race değil) pdfkit ile toplu PDF üretimi; seri vs worker pool benchmark (Node/Bun/Deno) | — |
 | 6 | `06-db-test` | (race değil) SQLite CRUD hızı; 10000 user seed (Node better-sqlite3 vs Bun bun:sqlite) | — |
+| 7 | `07-tcp-udp-cache` | (race değil) TCP/UDP veri alımı, Redis cache doğrulama, RabbitMQ publish; Node.js vs Bun | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -225,6 +227,21 @@ cd 06-db-test/bun && bun run bench
 
 Parametreler: `COUNT` (varsayılan 10000), `RUNS` (varsayılan 20).
 Ayrıntılar: `06-db-test/README.md`.
+
+## TCP/UDP cache doğrulama (Senaryo 7)
+
+`07-tcp-udp-cache/`, TCP ve UDP üzerinden gelen `{"userId":"..."}` mesajlarını
+Redis cache'te doğrular; kullanıcı varsa RabbitMQ'ya yayınlar, yoksa reddeder.
+Node.js ve Bun aynı Redis/RabbitMQ örneğini kullanır (`docker compose up -d`).
+
+```bash
+cd 07-tcp-udp-cache && docker compose up -d
+cd 07-tcp-udp-cache/nodejs && npm install && npm run bench
+cd 07-tcp-udp-cache/bun && bun install && bun run bench
+```
+
+Parametreler: `COUNT`, `REQUESTS`, `CONCURRENCY`, `RUNS`. Ayrıntılar:
+`07-tcp-udp-cache/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 

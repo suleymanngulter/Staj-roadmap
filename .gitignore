@@ -22,3 +22,7 @@ yarn-error.log*
 06-db-test/**/*.db
 06-db-test/**/node_modules/
 
+# tcp/udp cache benchmark çıktıları
+07-tcp-udp-cache/**/output/
+07-tcp-udp-cache/**/node_modules/
+

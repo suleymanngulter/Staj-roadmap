@@ -1,0 +1,13 @@
+{
+  "name": "tcp-udp-cache-benchmark-bun",
+  "version": "1.0.0",
+  "description": "TCP/UDP → Redis cache → RabbitMQ benchmark — Bun",
+  "scripts": {
+    "bench": "bun benchmark.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "amqplib": "^0.10.8",
+    "ioredis": "^5.6.1"
+  }
+}
