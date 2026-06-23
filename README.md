@@ -27,6 +27,8 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | SQLite işlem hızı (Node.js vs Bun) | `06-db-test` |
 | TCP/UDP → Redis cache → RabbitMQ (Node.js vs Bun) | `07-tcp-udp-cache` |
 | RabbitMQ publisher → consumer → dead letter queue | `08-rabbitmq-dead-letter` |
+| Redis sliding time window rate limiter | `09-redis-sliding-window` |
+| Redis sliding TTL cache (erişimde süreyi yenile) | `10-redis-sliding-ttl` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -83,6 +85,8 @@ node run-all.js
 | 6 | `06-db-test` | (race değil) SQLite CRUD hızı; 10000 user seed (Node better-sqlite3 vs Bun bun:sqlite) | — |
 | 7 | `07-tcp-udp-cache` | (race değil) TCP/UDP veri alımı, Redis cache doğrulama, RabbitMQ publish; Node.js vs Bun | — |
 | 8 | `08-rabbitmq-dead-letter` | (race değil) RabbitMQ publisher → consumer; retry kuyruğu ve dead letter queue (DLQ) | — |
+| 9 | `09-redis-sliding-window` | (race değil) Redis ZSET ile sliding time window rate limiter | — |
+| 10 | `10-redis-sliding-ttl` | (race değil) Redis GETEX ile sliding TTL; erişimde ömür süresini yenile | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -257,6 +261,31 @@ cd 08-rabbitmq-dead-letter/nodejs && npm install && npm run demo
 ```
 
 Ayrıntılar: `08-rabbitmq-dead-letter/README.md`.
+
+## Redis sliding window (Senaryo 9)
+
+`09-redis-sliding-window/`, sorted set ve Lua script ile son N ms içindeki istek
+sayısını sınırlayan kayan pencere rate limiter demosudur.
+
+```bash
+cd 09-redis-sliding-window && docker compose up -d
+cd 09-redis-sliding-window/nodejs && npm install && npm run demo
+```
+
+Parametreler: `WINDOW_MS`, `LIMIT`, `REDIS_URL`. Ayrıntılar:
+`09-redis-sliding-window/README.md`.
+
+## Redis sliding TTL (Senaryo 10)
+
+`10-redis-sliding-ttl/`, cache verisini TTL ile tutar; her okumada `GETEX` ile
+süreyi yeniden başlatır. Erişim yoksa key silinir (idle timeout / session benzeri).
+
+```bash
+cd 10-redis-sliding-ttl && docker compose up -d
+cd 10-redis-sliding-ttl/nodejs && npm install && npm run demo
+```
+
+Parametreler: `TTL_SEC`, `REDIS_URL`. Ayrıntılar: `10-redis-sliding-ttl/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 

@@ -1,0 +1,12 @@
+{
+  "name": "redis-sliding-window-nodejs",
+  "version": "1.0.0",
+  "description": "Redis sliding time window rate limiter demo",
+  "scripts": {
+    "demo": "node demo.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "ioredis": "^5.6.1"
+  }
+}
