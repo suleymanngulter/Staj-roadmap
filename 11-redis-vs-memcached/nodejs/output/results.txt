@@ -1,0 +1,28 @@
+Redis vs Memcached Benchmark
+Tarih     : 2026-06-23T12:13:25.337Z
+COUNT     : 10000 key (JSON user objesi)
+RUNS      : 10
+TTL_SEC   : 300
+CHUNK_SIZE: 500 (Memcached toplu SET paralel chunk)
+GET_CHUNK  : 500 (Memcached getMulti chunk; 0 = tek çağrı)
+Redis     : redis://127.0.0.1:6379 (toplu SET = pipeline, toplu GET = tek MGET)
+Memcached : 127.0.0.1:11211 (toplu SET = paralel chunk, toplu GET = getMulti chunk)
+Not       : Koşular sıralı; localhost, tek client, küçük JSON value (~70 B)
+
+--- Koşu bazlı süreler (ms) ---
+Koşu  1 | setSeq redis=811 mem=674 ms | getSeq redis=728 mem=683 ms | setBulk redis=58 mem=97 ms | getBulk redis=13 mem=68 ms
+Koşu  2 | setSeq redis=577 mem=750 ms | getSeq redis=548 mem=713 ms | setBulk redis=43 mem=90 ms | getBulk redis=11 mem=75 ms
+Koşu  3 | setSeq redis=414 mem=442 ms | getSeq redis=353 mem=412 ms | setBulk redis=43 mem=86 ms | getBulk redis=9 mem=60 ms
+Koşu  4 | setSeq redis=351 mem=604 ms | getSeq redis=355 mem=662 ms | setBulk redis=53 mem=88 ms | getBulk redis=8 mem=65 ms
+Koşu  5 | setSeq redis=563 mem=688 ms | getSeq redis=414 mem=672 ms | setBulk redis=33 mem=90 ms | getBulk redis=7 mem=61 ms
+Koşu  6 | setSeq redis=569 mem=428 ms | getSeq redis=792 mem=458 ms | setBulk redis=41 mem=86 ms | getBulk redis=8 mem=62 ms
+Koşu  7 | setSeq redis=378 mem=643 ms | getS eq redis=572 mem=730 ms | setBulk redis=36 mem=86 ms | getBulk redis=9 mem=69 ms
+Koşu  8 | setSeq redis=433 mem=506 ms | getSeq redis=484 mem=413 ms | setBulk redis=41 mem=83 ms | getBulk redis=9 mem=63 ms
+Koşu  9 | setSeq redis=420 mem=731 ms | getSeq redis=754 mem=578 ms | setBulk redis=44 mem=90 ms | getBulk redis=6 mem=59 ms
+Koşu 10 | setSeq redis=395 mem=586 ms | getSeq redis=425 mem=570 ms | setBulk redis=31 mem=78 ms | getBulk redis=8 mem=62 ms
+
+--- Ortalama (10 koşu, ms) ---
+  SET (tekil, 10000 key)      : Redis    491.1 | Memcached    605.2 | Memcached 1.23x yavaş
+  GET (tekil, 10000 key)      : Redis    542.5 | Memcached    589.1 | Memcached 1.09x yavaş
+  SET (toplu, 10000 key)      : Redis     42.3 | Memcached     87.4 | Memcached 2.07x yavaş
+  GET (toplu, 10000 key)      : Redis      8.8 | Memcached     64.4 | Memcached 7.32x yavaş

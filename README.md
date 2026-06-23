@@ -29,6 +29,7 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | RabbitMQ publisher → consumer → dead letter queue | `08-rabbitmq-dead-letter` |
 | Redis sliding time window rate limiter | `09-redis-sliding-window` |
 | Redis sliding TTL cache (erişimde süreyi yenile) | `10-redis-sliding-ttl` |
+| Redis vs Memcached cache benchmark | `11-redis-vs-memcached` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -87,6 +88,7 @@ node run-all.js
 | 8 | `08-rabbitmq-dead-letter` | (race değil) RabbitMQ publisher → consumer; retry kuyruğu ve dead letter queue (DLQ) | — |
 | 9 | `09-redis-sliding-window` | (race değil) Redis ZSET ile sliding time window rate limiter | — |
 | 10 | `10-redis-sliding-ttl` | (race değil) Redis GETEX ile sliding TTL; erişimde ömür süresini yenile | — |
+| 11 | `11-redis-vs-memcached` | (race değil) Redis vs Memcached SET/GET benchmark | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -286,6 +288,18 @@ cd 10-redis-sliding-ttl/nodejs && npm install && npm run demo
 ```
 
 Parametreler: `TTL_SEC`, `REDIS_URL`. Ayrıntılar: `10-redis-sliding-ttl/README.md`.
+
+## Redis vs Memcached (Senaryo 11)
+
+`11-redis-vs-memcached/`, aynı key/value iş yükünde Redis ve Memcached SET/GET
+sürelerini karşılaştırır (`COUNT`, `RUNS`).
+
+```bash
+cd 11-redis-vs-memcached && docker compose up -d
+cd 11-redis-vs-memcached/nodejs && npm install && npm run bench
+```
+
+Ayrıntılar: `11-redis-vs-memcached/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 
