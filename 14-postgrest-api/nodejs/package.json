@@ -1,0 +1,9 @@
+{
+  "name": "postgrest-api-demo",
+  "version": "1.0.0",
+  "description": "PostgREST — PostgreSQL tabloları doğrudan REST API",
+  "scripts": {
+    "demo": "node demo.js"
+  },
+  "license": "ISC"
+}

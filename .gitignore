@@ -36,4 +36,5 @@ yarn-error.log*
 11-redis-vs-memcached/**/node_modules/
 12-mongodb-catalog-cart/**/node_modules/
 13-postgresql-swiss-army/**/node_modules/
+14-postgrest-api/**/node_modules/
 

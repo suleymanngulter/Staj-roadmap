@@ -32,6 +32,7 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | Redis vs Memcached cache benchmark | `11-redis-vs-memcached` |
 | MongoDB dinamik katalog & sepet API (WiredTiger, esnek şema) | `12-mongodb-catalog-cart` |
 | PostgreSQL çoklu rol (JSONB, FTS, pgvector, PostGIS, queue) | `13-postgresql-swiss-army` |
+| PostgREST — PostgreSQL doğrudan REST API (RLS) | `14-postgrest-api` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -93,6 +94,7 @@ node run-all.js
 | 11 | `11-redis-vs-memcached` | (race değil) Redis vs Memcached SET/GET benchmark | — |
 | 12 | `12-mongodb-catalog-cart` | (race değil) MongoDB WiredTiger + esnek şema + gömülü sepet; Express API | — |
 | 13 | `13-postgresql-swiss-army` | (race değil) PostgreSQL JSONB, FTS, pgvector, PostGIS, NOTIFY/SKIP LOCKED queue | — |
+| 14 | `14-postgrest-api` | (race değil) PostgREST ile tablo → REST; Row Level Security (RLS) | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -328,6 +330,18 @@ cd 13-postgresql-swiss-army/nodejs && cp .env.example .env && npm install && npm
 ```
 
 Ayrıntılar: `13-postgresql-swiss-army/README.md`.
+
+## PostgREST API (Senaryo 14)
+
+`14-postgrest-api/`, PostgREST ile PostgreSQL tablolarını doğrudan REST endpoint'e
+çevirir; RLS ile DELETE engellenir.
+
+```bash
+cd 14-postgrest-api && docker compose up -d
+cd 14-postgrest-api/nodejs && npm run demo
+```
+
+Ayrıntılar: `14-postgrest-api/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 
