@@ -37,4 +37,7 @@ yarn-error.log*
 12-mongodb-catalog-cart/**/node_modules/
 13-postgresql-swiss-army/**/node_modules/
 14-postgrest-api/**/node_modules/
+15-mongodb-sparse-index/**/node_modules/
+# benchmark çıktısı benchmark.js ile yeniden üretilir
+# 15-mongodb-sparse-index/nodejs/output/
 

@@ -1,0 +1,51 @@
+MongoDB Normal vs Sparse Index Benchmark
+Tarih          : 2026-06-30T10:48:51.934Z
+Koleksiyon     : users
+Kayıt sayısı   : 2,000,000
+VIP oranı      : ~%5 (vipCouponCode alanı yalnızca VIP kullanıcılarda)
+Pozitif sorgu  : vipCouponCode = "TEST_CODE" (4,000 eşleşen)
+Negatif sorgu  : vipCouponCode = "___NONEXISTENT_VIP___"
+Tekrar (RUNS)  : 5 (ısınma + istemci tarafı ort/medyan ms)
+İndeks boyutu  : collStats.indexSizes["vipCouponCode_1"] (B-tree footprint, byte)
+
+--- Pozitif sorgu ---
+Senaryo      |  Ort(ms) |  Med(ms) |    Döküman |      Key |     Stage |  İndeks MB
+İndeks yok   |   510.99 |   518.46 |    2000000 |        0 |  COLLSCAN |          —
+Normal       |    27.24 |    24.61 |       4000 |     4000 |    IXSCAN |       9.56
+Sparse       |    23.51 |    21.11 |       4000 |     4000 |    IXSCAN |       1.68
+
+--- Negatif sorgu (kayıt yok) ---
+Senaryo      |  Ort(ms) |  Med(ms) |    Döküman |      Key |     Stage
+İndeks yok   |   486.89 |   490.16 |    2000000 |        0 |  COLLSCAN
+Normal       |     1.04 |     0.91 |          0 |        0 |    IXSCAN
+Sparse       |     1.09 |     1.09 |          0 |        0 |    IXSCAN
+
+--- Çıkarımlar ---
+
+1. Sorgu performansı (pozitif)
+   İndeks olmadan COLLSCAN tüm koleksiyonu tarar (2,000,000 döküman,
+   medyan ~518.46 ms). Normal ve sparse indeksler IXSCAN kullanır;
+   taranan döküman sayısı eşleşen kayıtlarla sınırlı kalır (~4,000).
+   Bu ölçekte okuma hızları birbirine yakındır (normal medyan 24.61 ms,
+   sparse medyan 21.11 ms).
+
+2. Depolama (indexSizes)
+   Normal indeks: 9.56 MB — alanı olmayan ~%95 döküman için null girişi tutar.
+   Sparse indeks: 1.68 MB — yalnızca vipCouponCode alanı olan ~%5 dökümanı indeksler.
+   Oran: sparse yaklaşık 5.7× daha küçük (RAM/disk ve yazma maliyeti düşer).
+
+3. Negatif sorgu (kayıt yok)
+   Var olmayan kodla arama: indeks varken IXSCAN, COLLSCAN değil.
+   Eşleşme olmasa bile B-tree üzerinde arama yapılır; koleksiyon taranmaz.
+
+4. Sparse indeks ne zaman?
+   Alan çoğu dökümanda yoksa (opsiyonel VIP, soft-delete flag, geçici kupon) sparse tercih edilir.
+   null veya "" değer set edilirse alan "var" sayılır — API'de boş string reddedilir, kaldırmak için $unset kullanılır.
+
+5. unique constraint
+   users koleksiyonunda aynı kampanya kodunu birden fazla kullanıcı paylaşabilir; unique burada yok.
+   Tekil kupon tanımı için ayrı coupons koleksiyonunda { unique: true, sparse: true } kullanılmalı.
+
+6. Üretim kararı (2,000,000 kayıt)
+   Okuma hızı: her iki indeks tipi de yeterli → asıl fark depolama ve INSERT/UPDATE indeks maliyeti.
+   %5 doluluk oranında sparse indeks belirgin tasarruf sağlar; normal indeks gereksiz ~7.88 MB harcar.

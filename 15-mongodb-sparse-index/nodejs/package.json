@@ -1,0 +1,22 @@
+{
+  "name": "mongodb-sparse-index-benchmark",
+  "version": "1.0.0",
+  "description": "Normal vs Sparse index — büyük veri seti CRUD ve benchmark",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/seeder.js",
+    "benchmark": "node src/benchmark.js",
+    "test": "node src/tests.js",
+    "index:normal": "node src/indexManager.js normal",
+    "index:sparse": "node src/indexManager.js sparse",
+    "index:drop": "node src/indexManager.js drop"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@faker-js/faker": "^9.6.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0"
+  }
+}

@@ -33,6 +33,7 @@ Race condition senaryolarının her birinin iki sürümü vardır:
 | MongoDB dinamik katalog & sepet API (WiredTiger, esnek şema) | `12-mongodb-catalog-cart` |
 | PostgreSQL çoklu rol (JSONB, FTS, pgvector, PostGIS, queue) | `13-postgresql-swiss-army` |
 | PostgREST — PostgreSQL doğrudan REST API (RLS) | `14-postgrest-api` |
+| MongoDB normal vs sparse index benchmark | `15-mongodb-sparse-index` |
 | Worker / child_process / cluster / Promise farkı | Aşağıdaki bölüm |
 | Semafor, atomic operations (kavram) | `docs/` PDF + aşağıdaki notlar |
 
@@ -95,6 +96,7 @@ node run-all.js
 | 12 | `12-mongodb-catalog-cart` | (race değil) MongoDB WiredTiger + esnek şema + gömülü sepet; Express API | — |
 | 13 | `13-postgresql-swiss-army` | (race değil) PostgreSQL JSONB, FTS, pgvector, PostGIS, NOTIFY/SKIP LOCKED queue | — |
 | 14 | `14-postgrest-api` | (race değil) PostgREST ile tablo → REST; Row Level Security (RLS) | — |
+| 15 | `15-mongodb-sparse-index` | (race değil) Normal vs sparse index; 2M+ veri seed + benchmark + CRUD API | — |
 
 Dosyalar (Senaryo 3): `single-thread.js`, `multi-thread.js` (çalıştırılabilir), `cpu-task.js` (yardımcı modül, doğrudan çalıştırılmaz).
 
@@ -342,6 +344,18 @@ cd 14-postgrest-api/nodejs && npm run demo
 ```
 
 Ayrıntılar: `14-postgrest-api/README.md`.
+
+## MongoDB Sparse Index (Senaryo 15)
+
+`15-mongodb-sparse-index/`, 2M+ `users` kaydında yalnızca %5'inde bulunan
+`vipCouponCode` alanı üzerinde normal ve sparse indeks farkını ölçer.
+
+```bash
+cd 15-mongodb-sparse-index && docker compose up -d
+cd 15-mongodb-sparse-index/nodejs && npm install && npm run seed && npm run benchmark
+```
+
+Ayrıntılar: `15-mongodb-sparse-index/README.md`.
 
 ## Worker vs child_process vs cluster vs Promise
 
