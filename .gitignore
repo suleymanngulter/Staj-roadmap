@@ -46,4 +46,6 @@ yarn-error.log*
 # 17-mongodb-telemetry-storage/nodejs/output/
 18-mongodb-secondary-indexes/**/node_modules/
 # 18-mongodb-secondary-indexes/nodejs/output/
+19-vector-db-benchmark/nodejs/node_modules/
+# 19-vector-db-benchmark/nodejs/output/
 

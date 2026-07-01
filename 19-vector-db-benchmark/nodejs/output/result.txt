@@ -1,0 +1,65 @@
+Vector DB Benchmark — metodoloji bilinçli karşılaştırma
+===============================================================================================
+Veri: 5,000 vektör × 384 | 100 sorgu × 3 tur | Top-K=10
+Script koşusu: 1× | Tarih: 2026-07-01T13:31:02.972Z
+
+=== SINIRLAMALAR — METODOLOJİ ===
+Bu benchmark LOCAL (127.0.0.1) ile CLOUD (internet) gecikmelerini AYNI tabloda gösterir;
+query ms farkının çoğu ağ RTT'sidir — saf motor hızı DEĞİLDİR. LOCAL ve CLOUD ayrı okunmalı.
+Insert: veri yükleme ve indeks oluşturma AYRI sütunlarda (Mongo Atlas index bekleme dahil).
+Recall@10: brute-force cosine ground truth; ANN parametreleri backend'e göre farklı olabilir.
+pgvector: PG_FORCE_HNSW=1 → seqscan kapalı (küçük tabloda Sort=exact recall tuzağı).
+Chroma: hnsw:search_ef metadata ile ayarlanır (varsayılan düşük → düşük recall).
+Pinecone indexMs: varsayılan warm; Mongo her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.
+Sorgu: 3 tam tur × 100 sorgu → medyan + p95.
+Load/Index: tek script koşusu — CLOUD için MULTI_RUNS=3 önerilir.
+
+YÜKLEME + İNDEKS
+-----------------------------------------------------------------------------------------------
+Backend                    | Konum  |    Load ms |   Index ms | Recall@10 | ANN / ortam
+-----------------------------------------------------------------------------------------------
+ChromaDB                   | LOCAL  |    1,952.7 |        0.0 |    95.1% | HNSW cosine search_ef=300
+  Not: probe@ef100=70.0% — search_ef runtime değiştirilemez, ayrı koleksiyon
+PostgreSQL pgvector        | LOCAL  |    1,067.7 |    2,423.3 |    98.1% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
+  Not: probe@ef100=76.8% (100 sorgu, ana ölçümden sonra)
+MongoDB Atlas Vector       | CLOUD  |   19,509.7 |   24,285.0 |    98.6% | numCandidates=100 tier=M0
+  Not: indexMs = Atlas Search (mongot) READY bekleme
+Pinecone                   | CLOUD  |   34,529.5 |        0.0 |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
+  Not: warm index (önceki koşudan)
+
+SORGU GECİKMESİ (LOCAL vs CLOUD ayrı yorumlanmalı)
+-----------------------------------------------------------------------------------------------
+Backend                    | Konum  |  Query med |  Query p95 | Recall@10
+-----------------------------------------------------------------------------------------------
+ChromaDB                   | LOCAL  |        7.1 |        9.4 |    95.1%
+PostgreSQL pgvector        | LOCAL  |        4.4 |        7.7 |    98.1%
+MongoDB Atlas Vector       | CLOUD  |      217.7 |      238.9 |    98.6%
+Pinecone                   | CLOUD  |      159.3 |      213.4 |    98.2%
+
+ÖZET: Query ms — LOCAL ort. medyan ~5.8 | CLOUD ort. medyan ~188.5 (ağ RTT farkı beklenir)
+
+PGVECTOR TEŞHİS
+-----------------------------------------------------------------------------------------------
+  Yapılandırma ef_search  : 300
+  SHOW hnsw.ef_search     : 300
+  EXPLAIN plan modu      : HNSW (EXACT=Sort/SeqScan → recall %100, ANN değil)
+  Plan                   : Limit  (cost=2487.98..2501.21 rows=10 width=12)   ->  Index Scan using embeddings_hnsw_idx on embeddings  (cost=2487.98..9104.00 rows=5000 w
+  Ana ölçüm recall@10  : 98.1% (ef_search=300)
+  Probe recall@10@ef100: 76.8% (100 sorgu; ef_search↑ → recall↑ beklenir)
+  probe@ef100=76.8% (100 sorgu, ana ölçümden sonra)
+
+CHROMADB TEŞHİS
+-----------------------------------------------------------------------------------------------
+  Yapılandırma search_ef  : 300
+  Sunucu metadata (getCollection (sunucu)): hnsw:search_ef=300
+  Probe yöntemi           : Ayrı koleksiyon — search_ef yalnızca create-time ayarlanır (pgvector SET gibi runtime yok)
+  Ana ölçüm recall@10  : 95.1% (search_ef=300)
+  Probe recall@10@ef100: 70.0% (100 sorgu; search_ef↑ → recall↑ beklenir)
+  probe@ef100=70.0% — search_ef runtime değiştirilemez, ayrı koleksiyon
+
+ANN PARAMETRE DOĞRULAMA
+-----------------------------------------------------------------------------------------------
+  ChromaDB                   ✓ getCollection metadata + probe (create-time search_ef; runtime SET yok)
+  PostgreSQL pgvector        ✓ SHOW hnsw.ef_search + EXPLAIN + runtime ef probe (aynı tablo)
+  MongoDB Atlas Vector       △ Atlas HNSW parametrelerini expose etmez; yalnızca numCandidates ayarlanır
+  Pinecone                   △ Search breadth servis tarafından yönetilir; kullanıcı probe yapamaz

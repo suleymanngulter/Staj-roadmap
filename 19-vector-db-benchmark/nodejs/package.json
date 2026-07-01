@@ -1,0 +1,19 @@
+{
+  "name": "vector-db-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vector DB benchmark — MongoDB Atlas, ChromaDB, Pinecone, pgvector",
+  "scripts": {
+    "start": "node src/benchmark.js",
+    "benchmark": "node src/benchmark.js",
+    "benchmark:multi": "MULTI_RUNS=3 node src/benchmark.js"
+  },
+  "dependencies": {
+    "@pinecone-database/pinecone": "^4.1.0",
+    "chromadb": "^3.5.0",
+    "dotenv": "^16.4.7",
+    "mongodb": "^6.12.0",
+    "pg": "^8.13.1",
+    "pgvector": "^0.2.0"
+  }
+}
