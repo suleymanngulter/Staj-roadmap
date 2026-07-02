@@ -1,19 +1,20 @@
 Vector DB Benchmark — metodoloji bilinçli karşılaştırma
 ===============================================================================================
-Veri: 5,000 vektör × 384 | 100 sorgu × 3 tur | Top-K=10
-Script koşusu: 3× | Tarih: 2026-07-02T06:12:47.609Z
+Ana tablo veri: 5,000 Gauss birim vektör × 384 | 100 sorgu × 3 tur | Top-K=10
+Script koşusu: 1× | Tarih: 2026-07-02T09:15:11.676Z
 
 === SINIRLAMALAR — METODOLOJİ ===
 Bu benchmark LOCAL (127.0.0.1) ile CLOUD (internet) gecikmelerini AYNI tabloda gösterir;
 query ms farkının çoğu ağ RTT'sidir — saf motor hızı DEĞİLDİR. LOCAL ve CLOUD ayrı okunmalı.
 Insert: veri yükleme ve indeks oluşturma AYRI sütunlarda (Mongo Atlas index bekleme dahil).
-Recall@10: brute-force cosine ground truth; ANN parametreleri backend'e göre farklı olabilir.
+Recall@10: brute-force cosine ground truth (yalnızca ana tablo backend'leri); ANN parametreleri farklı olabilir.
 pgvector: PG_FORCE_HNSW=1 → seqscan kapalı (küçük tabloda Sort=exact recall tuzağı).
 Chroma: hnsw:search_ef metadata ile ayarlanır (varsayılan düşük → düşük recall).
-Pinecone indexMs: varsayılan warm; Mongo her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.
-Mongo testi col.drop() ile koleksiyon+index sıfırlar; Pinecone yalnızca ns.deleteAll() (vektörler) — index dokunulmaz.
+Pinecone indexMs: varsayılan warm; Mongo manuel modda her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.
+Mongo manuel testi col.drop() ile koleksiyon+index sıfırlar; Pinecone yalnızca ns.deleteAll() (vektörler) — index dokunulmaz.
+MongoDB autoEmbed: ana karşılaştırma tablosunda YOK — aşağıda ayrı pilot bölüm (farklı veri + GT; ücretsiz Voyage rate limit).
 Sorgu: 3 tam tur × 100 sorgu → medyan + p95.
-Load/Index/Query: 3 tam script koşusu → medyan (min–max) — CLOUD RTT varyansı dahil.
+Load/Index: tek script koşusu — CLOUD için MULTI_RUNS=3 önerilir.
 
 === INDEX MS NASIL OKUNMALI ===
 Index ms sütunu, bulut servislerinin farklı temizlik/hazırlık adımlarından kaynaklanan bir test artefaktıdır;
@@ -24,23 +25,20 @@ YÜKLEME + İNDEKS
 -----------------------------------------------------------------------------------------------
 Backend                    | Konum  |    Load ms |   Index ms | Recall@10 | ANN / ortam
 -----------------------------------------------------------------------------------------------
-ChromaDB                   | LOCAL  | 888 (868–920) |    0 (0–0) |    96.0% | HNSW cosine search_ef=300
-PostgreSQL pgvector        | LOCAL  | 547 (526–577) | 1339 (1335–1409) |    97.9% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
-MongoDB Atlas Vector       | CLOUD  | 19101 (18588–19227) | 26000 (24673–31960) |    98.2% | numCandidates=100 tier=M0
-  Not: indexMs = col.drop() sonrası mongot READY (koleksiyon+index sıfırlanır)
-Pinecone                   | CLOUD  | 32304 (31669–33468) |    0 (0–0) |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
+ChromaDB                   | LOCAL  |      793.9 |        0.0 |    95.2% | HNSW cosine search_ef=300
+PostgreSQL pgvector        | LOCAL  |      551.5 |    1,410.5 |    97.9% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
+Pinecone                   | CLOUD  |   32,198.5 |        0.0 |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
   Not: warm index — yalnızca ns.deleteAll(); index dokunulmaz
 
 SORGU GECİKMESİ (LOCAL vs CLOUD ayrı yorumlanmalı)
 -----------------------------------------------------------------------------------------------
 Backend                    | Konum  |  Query med |  Query p95 | Recall@10
 -----------------------------------------------------------------------------------------------
-ChromaDB                   | LOCAL  |    3 (3–3) |    4 (4–4) |    96.0%
-PostgreSQL pgvector        | LOCAL  |    2 (2–2) |    3 (3–3) |    97.9%
-MongoDB Atlas Vector       | CLOUD  | 213 (212–217) | 226 (218–231) |    98.2%
-Pinecone                   | CLOUD  | 149 (143–162) | 160 (155–189) |    98.2%
+ChromaDB                   | LOCAL  |        2.6 |        3.5 |    95.2%
+PostgreSQL pgvector        | LOCAL  |        2.1 |        3.0 |    97.9%
+Pinecone                   | CLOUD  |      157.2 |      197.6 |    98.2%
 
-ÖZET: Query ms — LOCAL ort. medyan ~2.4 | CLOUD ort. medyan ~180.9 (ağ RTT farkı beklenir)
+ÖZET (ana tablo — autoEmbed pilot hariç): Query ms — LOCAL ort. medyan ~2.3 | CLOUD ort. medyan ~157.2 (ağ RTT farkı beklenir; yalnızca manuel vektör backend'leri)
 
 PGVECTOR TEŞHİS
 -----------------------------------------------------------------------------------------------
@@ -49,21 +47,49 @@ PGVECTOR TEŞHİS
   EXPLAIN plan modu      : HNSW (EXACT=Sort/SeqScan → recall %100, ANN değil)
   Plan                   : Limit  (cost=2487.98..2501.21 rows=10 width=12)   ->  Index Scan using embeddings_hnsw_idx on embeddings  (cost=2487.98..9104.00 rows=5000 w
   Ana ölçüm recall@10  : 97.9% (ef_search=300)
-  Probe recall@10@ef100: 79.4% (100 sorgu; ef_search↑ → recall↑ beklenir)
-  probe@ef100=79.4% (100 sorgu, ana ölçümden sonra)
+  Probe recall@10@ef100: 77.1% (100 sorgu; ef_search↑ → recall↑ beklenir)
+  probe@ef100=77.1% (100 sorgu, ana ölçümden sonra)
 
 CHROMADB TEŞHİS
 -----------------------------------------------------------------------------------------------
   Yapılandırma search_ef  : 300
   Sunucu metadata (getCollection (sunucu)): hnsw:search_ef=300
   Probe yöntemi           : Ayrı koleksiyon — search_ef yalnızca create-time ayarlanır (pgvector SET gibi runtime yok)
-  Ana ölçüm recall@10  : 96.0% (search_ef=300)
-  Probe recall@10@ef100: 72.1% (100 sorgu; search_ef↑ → recall↑ beklenir)
-  probe@ef100=72.1% — search_ef runtime değiştirilemez, ayrı koleksiyon
+  Ana ölçüm recall@10  : 95.2% (search_ef=300)
+  Probe recall@10@ef100: 68.6% (100 sorgu; search_ef↑ → recall↑ beklenir)
+  probe@ef100=68.6% — search_ef runtime değiştirilemez, ayrı koleksiyon
 
-ANN PARAMETRE DOĞRULAMA
+ANN PARAMETRE DOĞRULAMA (ana tablo)
 -----------------------------------------------------------------------------------------------
   ChromaDB                   ✓ getCollection metadata + probe (create-time search_ef; runtime SET yok)
   PostgreSQL pgvector        ✓ SHOW hnsw.ef_search + EXPLAIN + runtime ef probe (aynı tablo)
-  MongoDB Atlas Vector       △ Atlas HNSW parametrelerini expose etmez; yalnızca numCandidates ayarlanır
   Pinecone                   △ Search breadth servis tarafından yönetilir; kullanıcı probe yapamaz
+
+=== MONGODB ATLAS AUTOMATED EMBEDDING — AYRI PİLOT (ANA TABLOYA DAHİL DEĞİL) ===
+Üretim performansını yansıtmaz; farklı veri seti + kategori GT. Query med/p95 yalnızca Atlas çağrı süresidir.
+MONGODB_EMBED_QUERY_DELAY_MS varsa sorgular arası önleyici bekleme — query metriklerine DAHİL DEĞİLDİR.
+
+Veri seti (ana benchmark'tan FARKLI):
+  • 5,000 sentetik metin belgesi (50 kategori × 100 doc/id); Gauss birim vektörü DEĞİL
+  • Sorgu: doğal dil metni (Voyage autoEmbed); GT: kategori-id eşlemesi — cosine brute-force GT değil
+  • Sorgu örneklemi: 10 / 100 × 3 tur — istatistiksel olarak sınırlı
+  • Model: voyage-4-lite | tier: M0
+
+PİLOT METRİKLER (query = yalnızca Atlas $vectorSearch süresi)
+-----------------------------------------------------------------------------------------------
+   Load ms | Index READY ms | Query net med | Query net p95 | Recall@10
+-----------------------------------------------------------------------------------------------
+   3,351.8 |   84,101.3 |      519.9 |      614.1 |    14.0%
+
+İNDEKS HAZIRLIK (Atlas API embedding ile mongot READY süresini ayırmaz):
+  createSearchIndex çağrısı          : 1193.5 ms
+  İlk indeks kaydı görülme           : 1301.5 ms
+  READY olana kadar toplam bekleme   : 84101.3 ms
+  İlk kayıttan READY'ye kadar bekleme: 82799.8 ms
+
+SORGU THROTTLE / RATE LIMIT (query metriklerinden ayrı):
+  MONGODB_EMBED_QUERY_DELAY_MS       : 21000 (sorgular arası; ölçüme dahil değil)
+  Önleyici throttle toplamı          : 609.0 s (29 ara bekleme)
+  Voyage 429 backoff toplamı         : 0.0 s (0 retry)
+
+Recall@10 düşükse: kategori-tabanlı GT ile semantik arama uyumsuzluğu olabilir — ana tablo recall'ü ile kıyaslamayın.
