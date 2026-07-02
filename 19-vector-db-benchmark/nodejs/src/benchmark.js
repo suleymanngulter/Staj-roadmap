@@ -59,10 +59,16 @@ const LIMITATIONS = [
   `pgvector: PG_FORCE_HNSW=1 → seqscan kapalı (küçük tabloda Sort=exact recall tuzağı).`,
   `Chroma: hnsw:search_ef metadata ile ayarlanır (varsayılan düşük → düşük recall).`,
   `Pinecone indexMs: varsayılan warm; Mongo her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.`,
+  "Mongo testi col.drop() ile koleksiyon+index sıfırlar; Pinecone yalnızca ns.deleteAll() (vektörler) — index dokunulmaz.",
   `Sorgu: ${QUERY_RUNS} tam tur × ${N_QUERIES} sorgu → medyan + p95.`,
   MULTI_RUNS > 1
     ? `Load/Index/Query: ${MULTI_RUNS} tam script koşusu → medyan (min–max) — CLOUD RTT varyansı dahil.`
     : `Load/Index: tek script koşusu — CLOUD için MULTI_RUNS=3 önerilir.`,
+  "",
+  "=== INDEX MS NASIL OKUNMALI ===",
+  "Index ms sütunu, bulut servislerinin farklı temizlik/hazırlık adımlarından kaynaklanan bir test artefaktıdır;",
+  "karşılaştırılabilir değildir. Üretimde bu maliyet tek seferlik ve amortize edilir;",
+  "sistemler arası asıl karşılaştırma Query med/p95 ve Recall@10 üzerinden yapılmalıdır.",
 ].join("\n");
 
 const OUT = path.join(__dirname, "..", "output", "result.txt");
@@ -432,7 +438,7 @@ async function benchMongodb(vectors, queries, groundTruth) {
     queryMed,
     queryP95,
     recall,
-    note: "indexMs = Atlas Search (mongot) READY bekleme",
+    note: "indexMs = col.drop() sonrası mongot READY (koleksiyon+index sıfırlanır)",
     annVerify: "△ Atlas HNSW parametrelerini expose etmez; yalnızca numCandidates ayarlanır",
   };
 }
@@ -500,7 +506,11 @@ async function benchPinecone(vectors, queries, ids, groundTruth) {
     queryMed,
     queryP95,
     recall,
-    note: indexNote,
+    note: PINECONE_RECREATE_INDEX
+      ? indexNote
+      : indexMs > 0
+        ? indexNote
+        : "warm index — yalnızca ns.deleteAll(); index dokunulmaz",
     annVerify: "△ Search breadth servis tarafından yönetilir; kullanıcı probe yapamaz",
   };
 }

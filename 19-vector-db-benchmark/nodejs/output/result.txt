@@ -11,8 +11,14 @@ Recall@10: brute-force cosine ground truth; ANN parametreleri backend'e göre fa
 pgvector: PG_FORCE_HNSW=1 → seqscan kapalı (küçük tabloda Sort=exact recall tuzağı).
 Chroma: hnsw:search_ef metadata ile ayarlanır (varsayılan düşük → düşük recall).
 Pinecone indexMs: varsayılan warm; Mongo her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.
+Mongo testi col.drop() ile koleksiyon+index sıfırlar; Pinecone yalnızca ns.deleteAll() (vektörler) — index dokunulmaz.
 Sorgu: 3 tam tur × 100 sorgu → medyan + p95.
 Load/Index/Query: 3 tam script koşusu → medyan (min–max) — CLOUD RTT varyansı dahil.
+
+=== INDEX MS NASIL OKUNMALI ===
+Index ms sütunu, bulut servislerinin farklı temizlik/hazırlık adımlarından kaynaklanan bir test artefaktıdır;
+karşılaştırılabilir değildir. Üretimde bu maliyet tek seferlik ve amortize edilir;
+sistemler arası asıl karşılaştırma Query med/p95 ve Recall@10 üzerinden yapılmalıdır.
 
 YÜKLEME + İNDEKS
 -----------------------------------------------------------------------------------------------
@@ -21,9 +27,9 @@ Backend                    | Konum  |    Load ms |   Index ms | Recall@10 | ANN 
 ChromaDB                   | LOCAL  | 888 (868–920) |    0 (0–0) |    96.0% | HNSW cosine search_ef=300
 PostgreSQL pgvector        | LOCAL  | 547 (526–577) | 1339 (1335–1409) |    97.9% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
 MongoDB Atlas Vector       | CLOUD  | 19101 (18588–19227) | 26000 (24673–31960) |    98.2% | numCandidates=100 tier=M0
-  Not: indexMs = Atlas Search (mongot) READY bekleme
+  Not: indexMs = col.drop() sonrası mongot READY (koleksiyon+index sıfırlanır)
 Pinecone                   | CLOUD  | 32304 (31669–33468) |    0 (0–0) |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
-  Not: warm index (önceki koşudan)
+  Not: warm index — yalnızca ns.deleteAll(); index dokunulmaz
 
 SORGU GECİKMESİ (LOCAL vs CLOUD ayrı yorumlanmalı)
 -----------------------------------------------------------------------------------------------
