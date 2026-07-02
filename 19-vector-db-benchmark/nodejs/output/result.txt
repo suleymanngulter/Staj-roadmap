@@ -1,7 +1,7 @@
 Vector DB Benchmark — metodoloji bilinçli karşılaştırma
 ===============================================================================================
 Veri: 5,000 vektör × 384 | 100 sorgu × 3 tur | Top-K=10
-Script koşusu: 1× | Tarih: 2026-07-01T13:31:02.972Z
+Script koşusu: 3× | Tarih: 2026-07-02T06:12:47.609Z
 
 === SINIRLAMALAR — METODOLOJİ ===
 Bu benchmark LOCAL (127.0.0.1) ile CLOUD (internet) gecikmelerini AYNI tabloda gösterir;
@@ -12,31 +12,29 @@ pgvector: PG_FORCE_HNSW=1 → seqscan kapalı (küçük tabloda Sort=exact recal
 Chroma: hnsw:search_ef metadata ile ayarlanır (varsayılan düşük → düşük recall).
 Pinecone indexMs: varsayılan warm; Mongo her koşuda index yeniler — PINECONE_RECREATE_INDEX=1 cold parity.
 Sorgu: 3 tam tur × 100 sorgu → medyan + p95.
-Load/Index: tek script koşusu — CLOUD için MULTI_RUNS=3 önerilir.
+Load/Index/Query: 3 tam script koşusu → medyan (min–max) — CLOUD RTT varyansı dahil.
 
 YÜKLEME + İNDEKS
 -----------------------------------------------------------------------------------------------
 Backend                    | Konum  |    Load ms |   Index ms | Recall@10 | ANN / ortam
 -----------------------------------------------------------------------------------------------
-ChromaDB                   | LOCAL  |    1,952.7 |        0.0 |    95.1% | HNSW cosine search_ef=300
-  Not: probe@ef100=70.0% — search_ef runtime değiştirilemez, ayrı koleksiyon
-PostgreSQL pgvector        | LOCAL  |    1,067.7 |    2,423.3 |    98.1% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
-  Not: probe@ef100=76.8% (100 sorgu, ana ölçümden sonra)
-MongoDB Atlas Vector       | CLOUD  |   19,509.7 |   24,285.0 |    98.6% | numCandidates=100 tier=M0
+ChromaDB                   | LOCAL  | 888 (868–920) |    0 (0–0) |    96.0% | HNSW cosine search_ef=300
+PostgreSQL pgvector        | LOCAL  | 547 (526–577) | 1339 (1335–1409) |    97.9% | HNSW m=16 ef=64 ef_search=300 plan=HNSW
+MongoDB Atlas Vector       | CLOUD  | 19101 (18588–19227) | 26000 (24673–31960) |    98.2% | numCandidates=100 tier=M0
   Not: indexMs = Atlas Search (mongot) READY bekleme
-Pinecone                   | CLOUD  |   34,529.5 |        0.0 |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
+Pinecone                   | CLOUD  | 32304 (31669–33468) |    0 (0–0) |    98.2% | serverless aws/us-east-1 (varsayılan ANN)
   Not: warm index (önceki koşudan)
 
 SORGU GECİKMESİ (LOCAL vs CLOUD ayrı yorumlanmalı)
 -----------------------------------------------------------------------------------------------
 Backend                    | Konum  |  Query med |  Query p95 | Recall@10
 -----------------------------------------------------------------------------------------------
-ChromaDB                   | LOCAL  |        7.1 |        9.4 |    95.1%
-PostgreSQL pgvector        | LOCAL  |        4.4 |        7.7 |    98.1%
-MongoDB Atlas Vector       | CLOUD  |      217.7 |      238.9 |    98.6%
-Pinecone                   | CLOUD  |      159.3 |      213.4 |    98.2%
+ChromaDB                   | LOCAL  |    3 (3–3) |    4 (4–4) |    96.0%
+PostgreSQL pgvector        | LOCAL  |    2 (2–2) |    3 (3–3) |    97.9%
+MongoDB Atlas Vector       | CLOUD  | 213 (212–217) | 226 (218–231) |    98.2%
+Pinecone                   | CLOUD  | 149 (143–162) | 160 (155–189) |    98.2%
 
-ÖZET: Query ms — LOCAL ort. medyan ~5.8 | CLOUD ort. medyan ~188.5 (ağ RTT farkı beklenir)
+ÖZET: Query ms — LOCAL ort. medyan ~2.4 | CLOUD ort. medyan ~180.9 (ağ RTT farkı beklenir)
 
 PGVECTOR TEŞHİS
 -----------------------------------------------------------------------------------------------
@@ -44,18 +42,18 @@ PGVECTOR TEŞHİS
   SHOW hnsw.ef_search     : 300
   EXPLAIN plan modu      : HNSW (EXACT=Sort/SeqScan → recall %100, ANN değil)
   Plan                   : Limit  (cost=2487.98..2501.21 rows=10 width=12)   ->  Index Scan using embeddings_hnsw_idx on embeddings  (cost=2487.98..9104.00 rows=5000 w
-  Ana ölçüm recall@10  : 98.1% (ef_search=300)
-  Probe recall@10@ef100: 76.8% (100 sorgu; ef_search↑ → recall↑ beklenir)
-  probe@ef100=76.8% (100 sorgu, ana ölçümden sonra)
+  Ana ölçüm recall@10  : 97.9% (ef_search=300)
+  Probe recall@10@ef100: 79.4% (100 sorgu; ef_search↑ → recall↑ beklenir)
+  probe@ef100=79.4% (100 sorgu, ana ölçümden sonra)
 
 CHROMADB TEŞHİS
 -----------------------------------------------------------------------------------------------
   Yapılandırma search_ef  : 300
   Sunucu metadata (getCollection (sunucu)): hnsw:search_ef=300
   Probe yöntemi           : Ayrı koleksiyon — search_ef yalnızca create-time ayarlanır (pgvector SET gibi runtime yok)
-  Ana ölçüm recall@10  : 95.1% (search_ef=300)
-  Probe recall@10@ef100: 70.0% (100 sorgu; search_ef↑ → recall↑ beklenir)
-  probe@ef100=70.0% — search_ef runtime değiştirilemez, ayrı koleksiyon
+  Ana ölçüm recall@10  : 96.0% (search_ef=300)
+  Probe recall@10@ef100: 72.1% (100 sorgu; search_ef↑ → recall↑ beklenir)
+  probe@ef100=72.1% — search_ef runtime değiştirilemez, ayrı koleksiyon
 
 ANN PARAMETRE DOĞRULAMA
 -----------------------------------------------------------------------------------------------

@@ -611,7 +611,9 @@ function buildReport(rows) {
         r.annParams,
       ].join(" | ")
     );
-    if (r.note) lines.push(`  Not: ${r.note}`);
+    if (r.note && r.backend !== "PostgreSQL pgvector" && r.backend !== "ChromaDB") {
+      lines.push(`  Not: ${r.note}`);
+    }
   }
 
   lines.push("", "SORGU GECİKMESİ (LOCAL vs CLOUD ayrı yorumlanmalı)", sep);
